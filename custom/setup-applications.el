@@ -11,7 +11,7 @@
 (defadvice find-file-other-window (around find-files activate)
   "Also find all files within a list of files. This even works recursively."
   (if (listp filename)
-      (loop for f in filename do (find-file-other-window f wildcards))
+      (cl-loop for f in filename do (find-file-other-window f wildcards))
     ad-do-it))
 
 ;; In Eshell, you can run the commands in M-x
