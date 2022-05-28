@@ -311,7 +311,7 @@ Position the cursor at it's beginning, according to the current mode."
 (add-hook 'org-mode-hook (lambda () (setq truncate-lines nil)))
 (setq org-todo-keywords
       '((sequence "REPORT(r)" "BUG(b)" "KNOWNCAUSE(k)" "|" "FIXED(f)")
-        (sequence "TODO(T!)" "DOING(I!)" "|" "DONE(D@)3" "CANCELED(C@/!)")
+        (sequence "TODO(T!)" "ARRANGE(a)" "FOLLOW(l)" "PENDING(p)" "IGNORE(i@)" "DOING(I!)" "|" "DONE(D@)3" "CANCELED(C@/!)")
         ))
 
 
