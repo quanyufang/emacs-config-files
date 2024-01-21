@@ -33,7 +33,7 @@
 
 # 使用方法简介
 ## emacs安装：
-当然需要先安装emacs，mac系统个人推荐 http://emacsformacosx.com/。
+当然需要先安装emacs，mac系统个人推荐 http://emacsformacosx.com/  。
 
 ## 配置文件的使用
 使用方法:  
