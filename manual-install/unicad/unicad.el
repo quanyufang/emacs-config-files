@@ -140,7 +140,7 @@
 
 ;;(provide 'unicad)
 (eval-when-compile
-  (require 'cl))
+  (require 'cl-lib))
 
 (defvar unicad-version "Unicad v1.1.5")
 (defvar unicad-global-enable t)

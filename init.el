@@ -29,7 +29,7 @@
  '(helm-tramp-verbose 10)
  '(line-number-mode t)
  '(package-selected-packages
-   '(py-isort py-yapf undo-tree zygospore ztree ws-butler workgroups2 w3m volatile-highlights vlf smartparens slime-company shell-pop recentf-ext nyan-mode jedi iedit ibuffer-vc highlight-symbol highlight-numbers helm-swoop helm-gtags grandshell-theme golden-ratio ggtags function-args flycheck-tip expand-region ecb duplicate-thing dtrt-indent discover-my-major diff-hl company-jedi company-emacs-eclim company-c-headers comment-dwim-2 column-enforce-mode color-theme-sanityinc-tomorrow clean-aindent-mode anzu))
+   '(ecb zygospore ztree ws-butler workgroups2 w3m volatile-highlights vlf undo-tree smartparens slime-company shell-pop recentf-ext rainbow-mode php-mode nyan-mode markdown-mode jedi iedit ibuffer-vc highlight-symbol highlight-numbers helm-swoop helm-gtags grandshell-theme golden-ratio ggtags function-args flycheck-tip expand-region duplicate-thing dtrt-indent discover-my-major diff-hl company-jedi company-emacs-eclim company-c-headers comment-dwim-2 column-enforce-mode color-theme-sanityinc-tomorrow clean-aindent-mode anzu))
  '(send-mail-function 'smtpmail-send-it)
  '(smtpmail-smtp-server "smtp.gmail.com")
  '(smtpmail-smtp-service 587)

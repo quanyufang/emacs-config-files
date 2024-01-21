@@ -5,7 +5,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (require 'eshell)
 (require 'em-alias)
-(require 'cl)
+(require 'cl-lib)
 
 ;; Advise find-file-other-window to accept more than one file
 (defadvice find-file-other-window (around find-files activate)
