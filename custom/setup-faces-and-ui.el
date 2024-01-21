@@ -38,7 +38,7 @@
            ;;(font-spec :family "Courier New-13")
            ;; set italic font for italic face, since Emacs does not set italic
            ;; face automatically
-           (set-face-attribute 'italic nil
+           (set-face-attribute
                                :family "Inconsolata-Italic")))))
 
 
@@ -46,6 +46,9 @@
 (set-foreground-color "white")
 (set-face-attribute 'default nil :background "black")
 (set-face-attribute 'default nil :foreground "white")
+;; 设置默认字体大小为20
+(set-face-attribute 'default nil :height 200)
+
 
 (require 'highlight-symbol)
 

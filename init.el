@@ -1,5 +1,5 @@
 (require 'package)
-;;(setq package-archives '(("gnu" . "https://elpa.gnu.org/packages/")))
+(setq package-archives '(("gnu" . "https://elpa.gnu.org/packages/")))
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
 
@@ -29,7 +29,7 @@
  '(helm-tramp-verbose 10)
  '(line-number-mode t)
  '(package-selected-packages
-   '(undo-tree zygospore ztree ws-butler workgroups2 w3m volatile-highlights vlf smartparens slime-company shell-pop recentf-ext nyan-mode jedi iedit ibuffer-vc highlight-symbol highlight-numbers helm-swoop helm-gtags grandshell-theme golden-ratio ggtags function-args flycheck-tip expand-region ecb duplicate-thing dtrt-indent discover-my-major diff-hl company-jedi company-emacs-eclim company-c-headers comment-dwim-2 column-enforce-mode color-theme-sanityinc-tomorrow clean-aindent-mode anzu))
+   '(py-isort py-yapf undo-tree zygospore ztree ws-butler workgroups2 w3m volatile-highlights vlf smartparens slime-company shell-pop recentf-ext nyan-mode jedi iedit ibuffer-vc highlight-symbol highlight-numbers helm-swoop helm-gtags grandshell-theme golden-ratio ggtags function-args flycheck-tip expand-region ecb duplicate-thing dtrt-indent discover-my-major diff-hl company-jedi company-emacs-eclim company-c-headers comment-dwim-2 column-enforce-mode color-theme-sanityinc-tomorrow clean-aindent-mode anzu))
  '(send-mail-function 'smtpmail-send-it)
  '(smtpmail-smtp-server "smtp.gmail.com")
  '(smtpmail-smtp-service 587)
@@ -298,3 +298,8 @@
                           "[no file]")))))
 ;;(setq redisplay-dont-pause nil)
 (server-start)
+
+;; set language environment
+(set-language-environment 'UTF-8)
+(set-locale-environment "UTF-8")
+(with-temp-message "")
