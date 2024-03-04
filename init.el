@@ -29,7 +29,7 @@
  '(helm-tramp-verbose 10)
  '(line-number-mode t)
  '(package-selected-packages
-   '(ecb zygospore ztree ws-butler workgroups2 w3m volatile-highlights vlf undo-tree smartparens slime-company shell-pop recentf-ext rainbow-mode php-mode nyan-mode markdown-mode jedi iedit ibuffer-vc highlight-symbol highlight-numbers helm-swoop helm-gtags grandshell-theme golden-ratio ggtags function-args flycheck-tip expand-region duplicate-thing dtrt-indent discover-my-major diff-hl company-jedi company-emacs-eclim company-c-headers comment-dwim-2 column-enforce-mode color-theme-sanityinc-tomorrow clean-aindent-mode anzu))
+   '(unicad zygospore ztree ws-butler workgroups2 w3m volatile-highlights vlf undo-tree smartparens slime-company shell-pop recentf-ext rainbow-mode pkg-info php-mode nyan-mode markdown-mode jedi iedit ibuffer-vc highlight-symbol highlight-numbers helm-swoop helm-gtags grandshell-theme golden-ratio ggtags function-args flycheck-tip expand-region ecb duplicate-thing dtrt-indent discover-my-major diff-hl company-jedi company-emacs-eclim company-c-headers comment-dwim-2 column-enforce-mode color-theme-sanityinc-tomorrow clean-aindent-mode anzu))
  '(send-mail-function 'smtpmail-send-it)
  '(smtpmail-smtp-server "smtp.gmail.com")
  '(smtpmail-smtp-service 587)
@@ -126,6 +126,7 @@
     ;;pyim
     ;;pyim-basedict
     ;;docker
+    unicad
     ))
 
 (defun install-packages ()
@@ -142,9 +143,6 @@
 
 
 (add-to-list 'load-path "~/.emacs.d/custom")
-(add-to-list 'load-path "~/.emacs.d/manual-install/unicad")
-(add-to-list 'load-path "~/.emacs.d/manual-install/mew-6.7")
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; PACKAGE: workgroups2               ;;
@@ -300,6 +298,6 @@
 (server-start)
 
 ;; set language environment
-(set-language-environment 'UTF-8)
-(set-locale-environment "UTF-8")
-(with-temp-message "")
+(set-language-environment "UTF-8")
+(prefer-coding-system 'utf-8)
+(add-to-list 'file-coding-system-alist '("\\.org" utf-8))
