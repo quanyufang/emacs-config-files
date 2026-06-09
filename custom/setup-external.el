@@ -11,11 +11,6 @@
 ;; (add-hook 'org-mode-hook 'flyspell-mode)
 ;; (add-hook 'prog-mode-hook 'flyspell-prog-mode)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; GROUP: Processes -> Gud            ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(setq gud-chdir-before-run nil)
-
 ;; term-mode, used in M-x term
 (defun my-term-setup ()
   (interactive)

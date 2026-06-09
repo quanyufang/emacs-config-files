@@ -47,13 +47,6 @@
 ;; easier window navigation
 (windmove-default-keybindings)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; PACKAGE: company              ;;
-;;                               ;;
-;; GROUP: Convenience -> Company ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(add-hook 'after-init-hook 'global-company-mode)
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Package: expand-region                       ;;
 ;;                                              ;;
@@ -88,7 +81,7 @@
 ;;    (setq projectile-indexing-method 'alien)
 ;;  (setq projectile-indexing-method 'native))
 ;;(setq projectile-enable-caching t)
-;;(setq projectile-require-project-root t)
 ;;(projectile-global-mode)
 ;;(require 'helm-projectile)
 ;;(helm-projectile-on)
+;; projectile 用于编程项目管理，当前聚焦文本编辑，注释掉

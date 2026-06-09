@@ -1,0 +1,38 @@
+# Emacs compiled files
+*.elc
+
+# Emacs backup files
+*~
+\#*\#
+
+# Emacs auto-save files
+\#*\#
+.\#*
+
+# Emacs desktop save
+.emacs.desktop
+.emacs.desktop.lock
+
+# Packages
+elpa/
+
+# Eshell
+eshell/history
+eshell/lastdir
+
+# Projectile
+.projectile
+
+# Directory-local variables (often machine-specific)
+.dir-locals.el
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# GPG encrypted files (don't accidentally commit)
+*.gpg
