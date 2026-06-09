@@ -26,34 +26,39 @@ point reaches the beginning or end of the buffer, stop there."
 
 (global-set-key (kbd "C-a") 'prelude-move-beginning-of-line)
 
-(defadvice kill-ring-save (before slick-copy activate compile)
-  "When called interactively with no active region, copy a single
-line instead."
+(defun slick-copy-around (orig-fun &rest args)
+  "When called interactively with no active region, copy a single line."
   (interactive
-   (if mark-active (list (region-beginning) (region-end))
+   (if (use-region-p)
+       (list (region-beginning) (region-end))
      (message "Copied line")
-     (list (line-beginning-position)
-           (line-beginning-position 2)))))
+     (list (line-beginning-position) (line-beginning-position 2))))
+  (apply orig-fun args))
 
-(defadvice kill-region (before slick-cut activate compile)
-  "When called interactively with no active region, kill a single
-  line instead."
+(advice-add 'kill-ring-save :around #'slick-copy-around)
+
+(defun slick-cut-around (orig-fun &rest args)
+  "When called interactively with no active region, kill a single line."
   (interactive
-   (if mark-active (list (region-beginning) (region-end))
-     (list (line-beginning-position)
-           (line-beginning-position 2)))))
+   (if (use-region-p)
+       (list (region-beginning) (region-end))
+     (list (line-beginning-position) (line-beginning-position 2))))
+  (apply orig-fun args))
 
-;; kill a line, including whitespace characters until next non-whiepsace character
-;; of next line
-(defadvice kill-line (before check-position activate)
-  (if (member major-mode
-              '(emacs-lisp-mode scheme-mode lisp-mode
-                                c-mode c++-mode objc-mode
-                                latex-mode plain-tex-mode))
-      (if (and (eolp) (not (bolp)))
-          (progn (forward-char 1)
-                 (just-one-space 0)
-                 (backward-char 1)))))
+(advice-add 'kill-region :around #'slick-cut-around)
+
+(defun kill-line-cleanup-before (&rest _args)
+  "Kill extra whitespace at end of line in programming modes."
+  (when (member major-mode
+                '(emacs-lisp-mode scheme-mode lisp-mode
+                                  c-mode c++-mode objc-mode
+                                  latex-mode plain-tex-mode))
+    (when (and (eolp) (not (bolp)))
+      (forward-char 1)
+      (just-one-space 0)
+      (backward-char 1))))
+
+(advice-add 'kill-line :before #'kill-line-cleanup-before)
 
 ;; taken from prelude-editor.el
 ;; automatically indenting yanked text if in programming-modes
@@ -74,25 +79,27 @@ Only modes that don't derive from `prog-mode' should be listed here.")
   (if (<= (- end beg) yank-advised-indent-threshold)
       (indent-region beg end nil)))
 
-(defadvice yank (after yank-indent activate)
-  "If current mode is one of 'yank-indent-modes,
-indent yanked text (with prefix arg don't indent)."
-  (if (and (not (ad-get-arg 0))
-           (not (member major-mode yank-indent-blacklisted-modes))
-           (or (derived-mode-p 'prog-mode)
-               (member major-mode yank-indent-modes)))
-      (let ((transient-mark-mode nil))
-        (yank-advised-indent-function (region-beginning) (region-end)))))
-
-(defadvice yank-pop (after yank-pop-indent activate)
-  "If current mode is one of `yank-indent-modes',
-indent yanked text (with prefix arg don't indent)."
-  (when (and (not (ad-get-arg 0))
+(defun yank-indent-after (&rest _args)
+  "Indent yanked text if in programming or text mode."
+  (when (and (not current-prefix-arg)
              (not (member major-mode yank-indent-blacklisted-modes))
              (or (derived-mode-p 'prog-mode)
                  (member major-mode yank-indent-modes)))
     (let ((transient-mark-mode nil))
       (yank-advised-indent-function (region-beginning) (region-end)))))
+
+(advice-add 'yank :after #'yank-indent-after)
+
+(defun yank-pop-indent-after (&rest _args)
+  "Indent yank-popped text if in programming or text mode."
+  (when (and (not current-prefix-arg)
+             (not (member major-mode yank-indent-blacklisted-modes))
+             (or (derived-mode-p 'prog-mode)
+                 (member major-mode yank-indent-modes)))
+    (let ((transient-mark-mode nil))
+      (yank-advised-indent-function (region-beginning) (region-end)))))
+
+(advice-add 'yank-pop :after #'yank-pop-indent-after)
 
 ;; prelude-core.el
 (defun prelude-duplicate-current-line-or-region (arg)

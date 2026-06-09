@@ -5,14 +5,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (require 'eshell)
 (require 'em-alias)
-(require 'cl-lib)
 
-;; Advise find-file-other-window to accept more than one file
-(defadvice find-file-other-window (around find-files activate)
-  "Also find all files within a list of files. This even works recursively."
+;; Accept a list of files for find-file-other-window
+(defun find-files-around (orig-fun filename &rest args)
+  "Call `find-file-other-window' for each file in a list."
   (if (listp filename)
-      (cl-loop for f in filename do (find-file-other-window f wildcards))
-    ad-do-it))
+      (dolist (f filename)
+        (apply orig-fun f args))
+    (apply orig-fun filename args)))
+
+(advice-add 'find-file-other-window :around #'find-files-around)
 
 ;; In Eshell, you can run the commands in M-x
 ;; Here are the aliases to the commands.

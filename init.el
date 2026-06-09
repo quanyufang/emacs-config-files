@@ -31,10 +31,9 @@
    '("/usr/bin" "/bin" "/usr/sbin" "/sbin" "/usr/local/bin" "~/bin/global/bin" "~/.emacs.d/manual-install/mew-6.7/bin" "/Library/TeX/Distributions/Programs/texbin" "/Library/TeX/texbin/xelatex"))
  '(fci-rule-color "#d6d6d6")
  '(frame-background-mode 'dark)
- '(helm-tramp-verbose 10)
  '(line-number-mode t)
  '(package-selected-packages
-   '(zygospore w3m volatile-highlights vlf undo-tree smartparens shell-pop recentf-ext rainbow-mode markdown-mode iedit ibuffer-vc highlight-symbol helm-swoop helm grandshell-theme golden-ratio expand-region duplicate-thing dtrt-indent discover-my-major diff-hl comment-dwim-2 clean-aindent-mode anzu ws-butler yasnippet unicad ztree))
+   '(zygospore w3m volatile-highlights vlf undo-tree smartparens shell-pop recentf-ext rainbow-mode markdown-mode iedit ibuffer-vc highlight-symbol grandshell-theme golden-ratio expand-region duplicate-thing dtrt-indent discover-my-major diff-hl comment-dwim-2 clean-aindent-mode anzu ws-butler yasnippet unicad ztree denote org-roam org-modern vertico consult marginalia orderless embark embark-consult wgrep))
  '(send-mail-function 'smtpmail-send-it)
  '(smtpmail-smtp-server "smtp.gmail.com")
  '(smtpmail-smtp-service 587)
@@ -69,32 +68,40 @@
   '(anzu
     clean-aindent-mode
     comment-dwim-2
+    denote
     diff-hl
     discover-my-major
     dtrt-indent
     duplicate-thing
+    embark
+    embark-consult
     expand-region
     golden-ratio
     grandshell-theme
-    helm
-    helm-swoop
     highlight-symbol
     ibuffer-vc
     iedit
+    marginalia
     markdown-mode
+    orderless
+    org-modern
+    org-roam
     rainbow-mode
     recentf-ext
     shell-pop
     smartparens
     undo-tree
     unicad
+    vertico
     vlf
     volatile-highlights
     w3m
+    wgrep
     ws-butler
     yasnippet
     zygospore
-    ztree))
+    ztree
+    consult))
 
 (defun install-packages ()
   "Install all required packages."
@@ -122,13 +129,11 @@
 (require 'setup-environment)
 (require 'setup-faces-and-ui)
 (require 'setup-help)
-(require 'setup-helm)
+(require 'setup-vertico)
+(require 'setup-denote)
 (require 'setup-editing)
 
 ;;; General settings
-
-;; Helm
-(helm-autoresize-mode t)
 
 ;; Window navigation
 (windmove-default-keybindings)
