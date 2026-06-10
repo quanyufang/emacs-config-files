@@ -80,6 +80,22 @@
     "crypt" 'file)))
 (add-hook 'org-mode-hook #'org-crypt--hide-all-encrypted-entries)
 
+;; Protect encrypted PGP blocks from accidental editing
+(defun org-crypt--protect-encrypted-blocks ()
+  "Mark PGP blocks in the buffer as read-only."
+  (interactive)
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward "-----BEGIN PGP MESSAGE-----" nil t)
+      (let ((beg (match-beginning 0)))
+        (when (re-search-forward "-----END PGP MESSAGE-----" nil t)
+          (let ((end (match-end 0)))
+            (add-text-properties beg end
+                                 '(read-only t
+                                   help-echo "Encrypted — use C-c n c to decrypt"))))))))
+(add-hook 'org-mode-hook #'org-crypt--protect-encrypted-blocks)
+(add-hook 'after-save-hook #'org-crypt--protect-encrypted-blocks)
+
 ;; After manual decryption (C-c n c), the entry expands for editing.
 ;; After save, org-encrypt-entries re-encrypts and folds it back.
 
