@@ -67,6 +67,22 @@
 ;; Use Emacs minibuffer for GPG passphrase prompts (fixes "Inappropriate ioctl" on macOS)
 (setq epa-pinentry-mode 'loopback)
 
+;; Auto-fold encrypted entries on file open to show just the heading + lock indicator
+(defun org-crypt--hide-all-encrypted-entries ()
+  "Fold all encrypted entries so they show as single-line headings."
+  (org-with-wide-buffer
+   (org-map-entries
+    (lambda ()
+      (when (org-at-encrypted-entry-p)
+        (if (fboundp 'org-fold-hide-entry)
+            (org-fold-hide-entry)
+          (org-hide-entry))))
+    "crypt" 'file)))
+(add-hook 'org-mode-hook #'org-crypt--hide-all-encrypted-entries)
+
+;; After manual decryption (C-c n c), the entry expands for editing.
+;; After save, org-encrypt-entries re-encrypts and folds it back.
+
 ;; GPG key is stored in setup-local.el (gitignored, never committed).
 ;; Run M-x emacs-setup-gpg to configure it interactively.
 (defun org-crypt--load-local-key ()
