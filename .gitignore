@@ -36,3 +36,6 @@ Thumbs.db
 
 # GPG encrypted files (don't accidentally commit)
 *.gpg
+
+# Claude Code internal files
+.claude/

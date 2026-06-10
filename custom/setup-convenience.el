@@ -52,7 +52,7 @@
 ;;                                              ;;
 ;; GROUP: Convenience -> Abbreviation -> Expand ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(require 'expand-region)
+(require 'expand-region-core)
 (global-set-key (kbd "M-m") 'er/expand-region)
 
 

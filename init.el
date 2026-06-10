@@ -34,7 +34,7 @@
  '(frame-background-mode 'dark)
  '(line-number-mode t)
  '(package-selected-packages
-   '(zygospore w3m volatile-highlights vlf undo-tree smartparens shell-pop recentf-ext rainbow-mode markdown-mode iedit ibuffer-vc highlight-symbol grandshell-theme golden-ratio expand-region duplicate-thing dtrt-indent discover-my-major diff-hl comment-dwim-2 clean-aindent-mode anzu ws-butler yasnippet unicad ztree denote org-roam org-modern vertico consult marginalia orderless embark embark-consult wgrep))
+   '(zygospore w3m volatile-highlights vlf smartparens shell-pop recentf-ext rainbow-mode markdown-mode iedit ibuffer-vc highlight-symbol grandshell-theme golden-ratio expand-region duplicate-thing dtrt-indent discover-my-major diff-hl comment-dwim-2 clean-aindent-mode anzu ws-butler yasnippet unicad ztree denote org-roam org-modern vertico consult marginalia orderless embark embark-consult wgrep))
  '(send-mail-function 'smtpmail-send-it)
  '(smtpmail-smtp-server "smtp.gmail.com")
  '(smtpmail-smtp-service 587)
@@ -92,7 +92,6 @@
     recentf-ext
     shell-pop
     smartparens
-    undo-tree
     unicad
     vertico
     vlf
@@ -288,6 +287,29 @@ Show the list first and ask for confirmation."
   (message "Recompiling packages (this may take a minute)...")
   (package-recompile-all)
   (message "Package recompilation complete."))
+
+;;; ── Fix transient version for magit-section ────────────────
+;; magit-section (dep of org-roam) requires transient >= 0.13.
+;; Emacs 30 ships an older transient as built-in; we must load the
+;; upgraded ELPA version before any package tries to load magit-section.
+(defun ensure-transient-upgraded ()
+  "Ensure the ELPA version of transient is loaded before magit-section needs it.
+magit-section (dep of org-roam) requires transient >= 0.13, but Emacs 30
+ships an older built-in transient."
+  (when (package-installed-p 'transient)
+    (let ((dir (package-desc-dir (cadr (assq 'transient package-alist)))))
+      (when (and dir (file-directory-p dir) (string-match-p "elpa" dir))
+        ;; Unload the built-in transient if already loaded
+        (when (featurep 'transient)
+          (unload-feature 'transient t))
+        ;; Push ELPA version to front of load-path and load it
+        (add-to-list 'load-path dir)
+        (require 'transient)
+        (message "Loaded transient %s"
+                 (package-version-join
+                  (package-desc-version
+                   (cadr (assq 'transient package-alist)))))))))
+(ensure-transient-upgraded)
 
 ;;; Load custom modules (with graceful degradation)
 (add-to-list 'load-path "~/.emacs.d/custom")
