@@ -202,9 +202,15 @@ The fingerprint is stored in custom/setup-local.el which is gitignored."
                   all-keys)))
     (if (null choices)
         (user-error "No GPG keys found.  Run: gpg --full-generate-key")
-      (let* ((selected (completing-read "Select GPG key for encryption: "
-                                        choices nil t))
-             (fingerprint (cdr (assoc selected choices)))
+      ;; If only one key, use it directly without prompting
+      (let ((fingerprint
+             (if (= (length choices) 1)
+                 (cdar choices)
+               (cdr (assoc
+                     (completing-read
+                      (format "Select GPG key (%d available): " (length choices))
+                      choices nil t)
+                     choices))))
              (local-file
               (expand-file-name "custom/setup-local.el" user-emacs-directory)))
         ;; Write the key to setup-local.el
