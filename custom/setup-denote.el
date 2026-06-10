@@ -71,19 +71,75 @@
 (setq org-crypt-disable-auto-save t)
 (setq org-crypt-tag-matcher "crypt")
 
-;; Auto-encrypt :crypt: entries before every save, with error reporting
+;; Auto-encrypt :crypt: entries before every save, with detailed error reporting
+(defun org-crypt--validate-key ()
+  "Validate that a usable GPG key is configured.  Returns t if OK, nil with warning if not."
+  (cond
+   ;; Placeholder still present
+   ((and (listp org-crypt-key)
+         (string-match-p "AAAA1111\|XXXX1234\|placeholder"
+                         (car org-crypt-key)))
+    (display-warning 'org-crypt
+                     (concat
+                      "org-crypt-key is still a placeholder.  Edit ~/.emacs.d/custom/setup-denote.el:\n"
+                      "  (setq org-crypt-key '(\"YOUR-40-CHAR-FINGERPRINT\"))\n"
+                      "Run: gpg --list-keys --keyid-format LONG  to find your fingerprint.")
+                     :error)
+    nil)
+   ;; nil but login name doesn't match any key
+   ((null org-crypt-key)
+    (require 'epa)
+    (unless (epg-list-keys (epg-make-context) (user-login-name))
+      (display-warning 'org-crypt
+                       (format
+                        (concat
+                         "No GPG key matches your login name \"%s\".\n"
+                         "Set org-crypt-key to your fingerprint in setup-denote.el:\n"
+                         "  (setq org-crypt-key '(\"YOUR-FINGERPRINT\"))\n"
+                         "Current GPG keys: %s")
+                        (user-login-name)
+                        (mapconcat (lambda (k)
+                                     (epg-sub-key-id (car (epg-key-sub-key-list k))))
+                                   (epg-list-keys (epg-make-context)) ", "))
+                       :error)
+      nil)
+    t)
+   ;; Explicit key set — check it exists
+   (t
+    (require 'epa)
+    (let ((key-ids (if (listp org-crypt-key) org-crypt-key (list org-crypt-key)))
+          (all-keys (epg-list-keys (epg-make-context)))
+          found)
+      (dolist (kid key-ids)
+        (when (seq-find (lambda (k)
+                          (string-match-p kid (epg-sub-key-id (car (epg-key-sub-key-list k)))))
+                        all-keys)
+          (setq found t)))
+      (unless found
+        (display-warning 'org-crypt
+                         (format
+                          (concat
+                           "Configured org-crypt-key (%s) not found in GPG keyring.\n"
+                           "Run: gpg --list-keys --keyid-format LONG\n"
+                           "Then update ~/.emacs.d/custom/setup-denote.el")
+                          org-crypt-key)
+                         :error)
+        nil)
+      t))))
+
 (add-hook 'org-mode-hook
           (lambda ()
             (add-hook 'before-save-hook
                       (lambda ()
-                        (condition-case err
-                            (org-encrypt-entries)
-                          (error
-                           (display-warning
-                            'org-crypt
-                            (format "Encryption failed: %s\nHint: check org-crypt-key in setup-denote.el"
-                                    (error-message-string err))
-                            :error))))
+                        (when (and (eq major-mode 'org-mode)
+                                   (org-crypt--validate-key))
+                          (condition-case err
+                              (org-encrypt-entries)
+                            (error
+                             (display-warning
+                              'org-crypt
+                              (format "Encryption failed: %s" (error-message-string err))
+                              :error)))))
                       nil t)))
 
 ;; C-c n c: decrypt entry to view/edit (save re-encrypts automatically)
