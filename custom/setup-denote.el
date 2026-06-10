@@ -75,14 +75,21 @@
 ;; Disable auto-save for encrypted entries (security)
 (setq org-crypt-disable-auto-save t)
 
-;; Auto-encrypt entries tagged :crypt: before saving
-(org-crypt-use-before-save-magic)
-
-;; Tag to trigger encryption
+;; Tag that triggers encryption (tags go at end of heading: * Heading :crypt:)
 (setq org-crypt-tag-matcher "crypt")
 
-;; Key binding: encrypt/decrypt current entry
-(global-set-key (kbd "C-c n c") 'org-encrypt-entry)
+;; Auto-encrypt before save: use before-save-hook (more reliable than
+;; the old advice-based org-crypt-use-before-save-magic in Emacs 30).
+(add-hook 'org-mode-hook
+          (lambda ()
+            (add-hook 'before-save-hook
+                      (lambda ()
+                        (when (eq major-mode 'org-mode)
+                          (org-encrypt-entries)))
+                      nil t)))
+
+;; Key binding: manually encrypt/decrypt current entry
+(global-set-key (kbd "C-c n c") 'org-decrypt-entry)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Org-modern: modern org-mode look    ;;
@@ -138,8 +145,8 @@
 ;;; │ C-c n a  │ org-roam-alias-add                  │
 ;;; │ C-c n g  │ org-roam-graph                      │
 ;;; │ C-c n s  │ org-roam-db-sync                    │
-;;; │ C-c n c  │ org-encrypt-entry                   │
-;;; │ C-c c    │ org-capture                         │
+;;; │ C-c n c  │ org-decrypt-entry（加密条目上解密/查看） │
+;;; │ C-c c    │ org-capture                          │
 ;;; └──────────┴─────────────────────────────────────┘
 
 )  ; end of when denote is available
