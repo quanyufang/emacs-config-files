@@ -12,6 +12,7 @@
 (require 'package)
 (setq package-archives '(("melpa" . "https://melpa.org/packages/")
                          ("gnu"   . "https://elpa.gnu.org/packages/")))
+(setq package-install-upgrade-built-in t)  ; allow upgrading built-in deps like transient
 (package-initialize)
 
 (custom-set-variables
@@ -236,6 +237,57 @@ Refreshes archive contents first, then presents a diff-like buffer."
         (package-menu-mode)
         (goto-char (point-min))
         (pop-to-buffer (current-buffer))))))
+
+;;; ── Interactive: clean orphaned packages ───────────────────
+(defun emacs-clean-orphan-packages ()
+  "Remove packages not in `packages-need' that are safe to delete.
+Show the list first and ask for confirmation."
+  (interactive)
+  (let ((orphans
+         (seq-filter
+          (lambda (pkg-desc)
+            (not (memq (package-desc-name pkg-desc) packages-need)))
+          (cdr (if (fboundp 'package--alist)
+                   (package--alist)
+                 package-alist)))))
+    (if (null orphans)
+        (message "No orphaned packages found — all %d packages are needed."
+                 (length packages-need))
+      ;; Show what would be removed
+      (with-current-buffer (get-buffer-create "*Orphaned Packages*")
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (format "%d orphaned package(s) not in current config:\n\n" (length orphans)))
+          (dolist (p orphans)
+            (let* ((name (package-desc-name p))
+                   (ver  (package-version-join (package-desc-version p)))
+                   (dir  (package-desc-dir p)))
+              (insert (format "  %-30s %s\n    %s\n" (symbol-name name) ver dir))))
+          (insert "\nPress 'd' to delete all, 'q' to cancel.\n"))
+        (let ((map (make-sparse-keymap)))
+          (define-key map (kbd "d")
+                      (lambda ()
+                        (interactive)
+                        (dolist (p orphans)
+                          (let ((dir (package-desc-dir p)))
+                            (when (and dir (file-directory-p dir))
+                              (delete-directory dir t)
+                              (message "Deleted %s" (package-desc-name p)))))
+                        (message "Removed %d orphaned packages. Restart Emacs."
+                                 (length orphans))
+                        (kill-buffer)))
+          (define-key map (kbd "q") (lambda () (interactive) (kill-buffer)))
+          (use-local-map map))
+        (goto-char (point-min))
+        (pop-to-buffer (current-buffer))))))
+
+;;; ── Interactive: recompile stale packages ─────────────────
+(defun emacs-recompile-packages ()
+  "Byte-recompile all installed packages to eliminate stale .elc warnings."
+  (interactive)
+  (message "Recompiling packages (this may take a minute)...")
+  (package-recompile-all)
+  (message "Package recompilation complete."))
 
 ;;; Load custom modules (with graceful degradation)
 (add-to-list 'load-path "~/.emacs.d/custom")
