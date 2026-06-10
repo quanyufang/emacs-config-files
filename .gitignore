@@ -39,3 +39,6 @@ Thumbs.db
 
 # Claude Code internal files
 .claude/
+
+# Local machine-specific config (GPG keys, etc.)
+custom/setup-local.el

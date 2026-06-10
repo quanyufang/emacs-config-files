@@ -64,10 +64,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (require 'org-crypt)
 
-;; nil would search by user-login-name which may not match the GPG UID
-;; the GPG key UID ("Eric Fang").  Explicitly use the key fingerprint.
-;; Replace with your 40-char GPG fingerprint (see gpg --list-keys --keyid-format LONG)
-(setq org-crypt-key '("AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555"))
+;; GPG key is stored in setup-local.el (gitignored, never committed).
+;; Run M-x emacs-setup-gpg to configure it interactively.
+(defun org-crypt--load-local-key ()
+  "Load my-org-crypt-key from setup-local.el if present."
+  (let ((local-file (expand-file-name "custom/setup-local.el" user-emacs-directory)))
+    (when (file-readable-p local-file)
+      (load local-file nil t))
+    (when (and (boundp 'my-org-crypt-key) my-org-crypt-key)
+      my-org-crypt-key)))
+
+(setq org-crypt-key (or (org-crypt--load-local-key)
+                        '("PLACEHOLDER-RUN-M-x-emacs-setup-gpg")))
 (setq org-crypt-disable-auto-save t)
 (setq org-crypt-tag-matcher "crypt")
 
@@ -75,9 +83,9 @@
 (defun org-crypt--validate-key ()
   "Validate that a usable GPG key is configured.  Returns t if OK, nil with warning if not."
   (cond
-   ;; Placeholder still present
+   ;; Placeholder still present — guide user to setup
    ((and (listp org-crypt-key)
-         (string-match-p "AAAA1111\|XXXX1234\|placeholder"
+         (string-match-p "PLACEHOLDER\|AAAA1111\|XXXX1234\|placeholder"
                          (car org-crypt-key)))
     (display-warning 'org-crypt
                      (concat
@@ -174,6 +182,41 @@
          :no-save t)))
 
 (global-set-key (kbd "C-c c") 'org-capture)
+
+;;; ── Interactive GPG setup (saves to setup-local.el) ─────────
+(defun emacs-setup-gpg ()
+  "Interactively select a GPG key for org-crypt and save to setup-local.el.
+The fingerprint is stored in custom/setup-local.el which is gitignored."
+  (interactive)
+  (unless (executable-find "gpg")
+    (user-error "GPG not found. Install with: brew install gnupg"))
+  (require 'epa)
+  (let* ((all-keys (epg-list-keys (epg-make-context)))
+         (choices
+          (mapcar (lambda (k)
+                    (let ((sub (car (epg-key-sub-key-list k))))
+                      (cons (format "%-40s  %s"
+                                    (epg-sub-key-id sub)
+                                    (epg-user-id-string (car (epg-key-user-id-list k))))
+                            (epg-sub-key-id sub))))
+                  all-keys)))
+    (if (null choices)
+        (user-error "No GPG keys found.  Run: gpg --full-generate-key")
+      (let* ((selected (completing-read "Select GPG key for encryption: "
+                                        choices nil t))
+             (fingerprint (cdr (assoc selected choices)))
+             (local-file
+              (expand-file-name "custom/setup-local.el" user-emacs-directory)))
+        ;; Write the key to setup-local.el
+        (with-temp-buffer
+          (insert ";; Local GPG key for org-crypt — auto-generated, do not commit.\n")
+          (insert (format "(defvar my-org-crypt-key '%S)\n"
+                          (list fingerprint)))
+          (write-file local-file))
+        ;; Reload and apply
+        (setq org-crypt-key (list fingerprint))
+        (message "GPG key saved to %s (gitignored).  org-crypt is now ready."
+                 local-file)))))
 
 ;;; Keybinding summary (all under C-c n prefix):
 ;;; ┌──────────┬─────────────────────────────────────┐
