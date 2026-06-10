@@ -72,5 +72,13 @@
 ;;(require 'color-theme-sanityinc-tomorrow)
 (load-theme 'grandshell t)
 
+;; Fix grandshell-theme: Emacs 30 rejects nil face attributes, must use 'unspecified
+;; The theme (last updated 2018) uses nil which now triggers warnings.
+(when (>= emacs-major-version 30)
+  (set-face-attribute 'show-paren-match nil :background 'unspecified)
+  (set-face-attribute 'header-line nil :background 'unspecified)
+  (set-face-attribute 'sh-heredoc nil :foreground 'unspecified)
+  (set-face-attribute 'sh-quoted-exec nil :foreground 'unspecified))
+
 ;; define global-font-lock-mode
 (setq font-lock-maximum-decoration 4)
