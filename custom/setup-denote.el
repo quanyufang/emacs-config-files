@@ -64,6 +64,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (require 'org-crypt)
 
+;; Use Emacs minibuffer for GPG passphrase prompts (fixes "Inappropriate ioctl" on macOS)
+(setq epa-pinentry-mode 'loopback)
+
 ;; GPG key is stored in setup-local.el (gitignored, never committed).
 ;; Run M-x emacs-setup-gpg to configure it interactively.
 (defun org-crypt--load-local-key ()
