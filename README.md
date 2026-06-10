@@ -14,6 +14,7 @@
 - **移除**：GNU GLOBAL（GTAGS）、CEDET、ECB、Eclim、Flycheck、Company 等开发工具
 - **新增**：Vertico + Consult + Marginalia + Orderless + Embark 现代补全方案（替代 Helm）
 - **新增**：Denote + Org-roam + Org-crypt 笔记管理系统
+- **新增**：inline-crypt 内联文本加密（段落内部分文本加密）
 - **迁移**：全部 `defadvice` 替换为 `advice-add`
 - **精简**：配置文件从 ~2000 行缩减为 ~1200 行
 
@@ -37,7 +38,6 @@
 | 增量搜索 | isearch + anzu | 搜索计数和替换预览 |
 | 多光标编辑 | iedit | 同时编辑多处相同文本 |
 | 区域扩展 | expand-region | 按语义逐步扩大选区 |
-| 撤销树 | undo-tree | 可视化撤销历史 |
 | 智能缩进 | dtrt-indent + clean-aindent | 自动检测和修正缩进 |
 | 注释 | comment-dwim-2 | 智能注释/取消注释 |
 | 历史粘贴 | consult-yank | 浏览 kill-ring 历史 |
@@ -49,7 +49,8 @@
 |------|----|------|
 | 笔记管理 | Denote | 基于文件命名规范的笔记系统 |
 | 双向链接 | Org-roam | 类 Roam Research 的知识图谱 |
-| 条目加密 | Org-crypt | GPG 加密 org 文档中的敏感条目 |
+| 条目加密 | Org-crypt | GPG 加密整条 org heading |
+| 内联加密 | inline-crypt | GPG 加密段落内任意文本片段 |
 | 现代化显示 | Org-modern | 美化 org-mode 的视觉呈现 |
 | 快速捕获 | Org-capture | 快速记录想法和待办事项 |
 | Markdown 编辑 | markdown-mode | 完整的 Markdown 编辑支持 |
@@ -100,7 +101,7 @@ git checkout emacs30-upgrade
 
 ```bash
 # macOS（推荐）
-brew install gnupg          # org-crypt 加密所需
+brew install gnupg          # 内联加密 + org 笔记加密
 brew install ripgrep        # consult-ripgrep 全文搜索
 
 # 创建笔记目录
@@ -114,6 +115,10 @@ gpg --full-generate-key     # 按提示操作
 gpg --list-keys             # 确认密钥存在
 ```
 
+> 配置完成后，选中敏感文本按 `C-c e` 即可加密，按 `C-c d` 解密查看。
+> 详见 [GPG-Guide.md](GPG-Guide.md) 了解 GPG 密钥备份、恢复和日常使用。
+> 新手请先看 [GPG-Tutorial.md](GPG-Tutorial.md) 逐步操作。
+
 ### 首次启动
 
 启动 Emacs 后等待包自动安装（约 3-5 分钟）。安装完成后即可正常使用。
@@ -121,6 +126,17 @@ gpg --list-keys             # 确认密钥存在
 ---
 
 ## 常用快捷键
+
+### 加密
+
+| 按键 | 功能 | 说明 |
+|------|------|------|
+| `C-c n c` | org-crypt：加/解密整条条目 | org 模式下，标题含 `:crypt:` 标签的条目 |
+| `C-c e` | inline-crypt：加密选区 | 选中文本 → 替换为 GPG 加密块 |
+| `C-c d` | inline-crypt：解密当前块 | 光标在加密块上 → 就地解密编辑 |
+| — | 保存时自动重加密 | 被 `C-c d` 解开的块，保存时自动恢复加密 |
+
+> **区别**：`org-crypt` 处理整条 org heading，`inline-crypt` 处理段落内的任意文本片段。两者可同时使用。
 
 ### 核心操作
 
@@ -189,6 +205,7 @@ gpg --list-keys             # 确认密钥存在
 │   ├── setup-editing.el              # 编辑核心配置
 │   ├── setup-vertico.el              # Vertico+Consult 补全
 │   ├── setup-denote.el               # 笔记系统
+│   ├── setup-inline-crypt.el          # 内联文本加密
 │   ├── setup-files.el                # 文件管理
 │   ├── setup-faces-and-ui.el         # 主题/UI
 │   ├── setup-convenience.el          # 便捷功能
