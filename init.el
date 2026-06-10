@@ -171,22 +171,6 @@
 
 (install-packages)
 
-;;; System dependency checks
-(defun check-system-dependencies ()
-  "Check for optional external tools and warn if missing."
-  (interactive)
-  (let ((optional-deps
-         '(("rg" . "ripgrep: install with `brew install ripgrep` (used by consult-ripgrep)")
-           ("gpg" . "GnuPG: install with `brew install gnupg` (required for org-crypt)")
-           ("gpg2" . "GnuPG: install with `brew install gnupg` (required for org-crypt)"))))
-    (dolist (dep optional-deps)
-      (unless (executable-find (car dep))
-        (display-warning 'init
-                         (format "Missing optional tool: %s" (cdr dep))
-                         :warning)))))
-
-(check-system-dependencies)
-
 ;;; Load custom modules (with graceful degradation)
 (add-to-list 'load-path "~/.emacs.d/custom")
 
@@ -249,6 +233,21 @@
       (setenv "PATH" path-from-shell)
       (setq exec-path (split-string path-from-shell path-separator))))
   (set-exec-path-from-shell-PATH))
+
+;;; System dependency checks (after PATH is set up)
+(defun check-system-dependencies ()
+  "Check for optional external tools and warn if missing."
+  (interactive)
+  (let ((optional-deps
+         '(("rg" . "ripgrep: install with `brew install ripgrep` (used by consult-ripgrep)")
+           ("gpg" . "GnuPG: install with `brew install gnupg` (required for org-crypt)"))))
+    (dolist (dep optional-deps)
+      (unless (executable-find (car dep))
+        (display-warning 'init
+                         (format "Missing optional tool: %s" (cdr dep))
+                         :warning)))))
+
+(check-system-dependencies)
 
 ;;; Frame title
 (setq-default frame-title-format
