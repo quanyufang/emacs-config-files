@@ -64,14 +64,27 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (require 'org-crypt)
 
-(setq org-crypt-key nil)
+;; nil would search by user-login-name which may not match the GPG UID
+;; the GPG key UID ("Eric Fang").  Explicitly use the key fingerprint.
+;; Replace with your 40-char GPG fingerprint (see gpg --list-keys --keyid-format LONG)
+(setq org-crypt-key '("AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555"))
 (setq org-crypt-disable-auto-save t)
 (setq org-crypt-tag-matcher "crypt")
 
-;; Auto-encrypt :crypt: entries before every save
+;; Auto-encrypt :crypt: entries before every save, with error reporting
 (add-hook 'org-mode-hook
           (lambda ()
-            (add-hook 'before-save-hook #'org-encrypt-entries nil t)))
+            (add-hook 'before-save-hook
+                      (lambda ()
+                        (condition-case err
+                            (org-encrypt-entries)
+                          (error
+                           (display-warning
+                            'org-crypt
+                            (format "Encryption failed: %s\nHint: check org-crypt-key in setup-denote.el"
+                                    (error-message-string err))
+                            :error))))
+                      nil t)))
 
 ;; C-c n c: decrypt entry to view/edit (save re-encrypts automatically)
 (global-set-key (kbd "C-c n c") 'org-decrypt-entry)

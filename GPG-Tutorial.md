@@ -287,7 +287,30 @@ rm test.txt test.txt.asc
 
 ## 第六步：在 Emacs 中试试
 
-### 6.1 加密一条 org 条目
+### 6.1 常见坑：org-crypt 静默失败
+
+如果 org-crypt 加密不生效，最常见的原因是：
+
+**你的 macOS 登录名和 GPG 密钥 UID 中的名字不一致。**
+
+org-crypt 在 `org-crypt-key` 为 `nil` 时，会用 `user-login-name` 去搜索 GPG 密钥。例如：
+
+```
+macOS 登录名：yourlogin
+GPG 密钥 UID：Your Name (笔记加密) <your@email.com>
+
+搜索 "yourlogin" → 无匹配 → 加密静默失败
+```
+
+**解法**：在 `setup-denote.el` 中显式指定指纹，不用名字搜索：
+
+```elisp
+(setq org-crypt-key '("你的40位完整指纹"))
+```
+
+指纹用 `gpg --list-keys --keyid-format LONG` 查看，`pub` 行下面那 40 位十六进制串就是。
+
+### 6.2 加密一条 org 条目
 
 在任意 `.org` 文件中：
 
