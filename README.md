@@ -1,80 +1,215 @@
-## 这套配置文件的目标
-* 满足C/C++、PHP、Python、JAVA以及Common Lisp（ELisp）开发人员的一般需求
-    * JAVA支持采用eclim+eclipse
-* 支持多个系统图形界面和命令行界面
-    * 目前支持OS X图形界面，OS X终端，CentOS 终端， Ubuntu 终端
+# Emacs 配置文件
 
-## 感谢
-感谢原作者[tuhdo](https://github.com/tuhdo "")，这份配置以tuhdo的配置为基础不断修改。
+## 项目定位
 
-## 特点：
-* 为 C/C++、PHP、Python、Common Lisp编程进行专门定制，满足代码编写过程中快速浏览代码、代码提醒/补足等需要。
-* 代码阅读和编写支持
-    * 通过company进行代码补全。
-    * 使用GTAGS、ETAGS帮助阅读代码。 
-    * 统一C/C++、PHP、Python在阅读过程中代码的跳转使用的快捷键等。
-    * python使用jedi来完成代码补足的功能。 
-* 项目管理
-    * 使用projectile 进行项目管理，可以快速的在项目内部查找文件，在项目中grep，在和helm结合起来使用后，非常方便，唯一的缺点是，在数千个文件构成的项目初始化时需要约1分钟的初始化时间。[projectile项目](https://github.com/bbatsov/projectile "")在此。
-* ANYTHING
-    * 使用强大的helm,参考[helm项目](https://emacs-helm.github.io/helm/ "")在此。
-    * Helm是Emacs的增量选择框架，具体一点类似google search框当中给你的输入提示，但是强大很多，可以支持的范围很广，包括查找文件是，打开的buffer等，可以这么说，用过helm才会知道写代码的时候需要记住的东西可以那么少，而要找到的时候又是那么快
-    * 需要特别说明的是，当你用了Helm以后，emacs的快捷键记不住也没什么，你可以用过helm-M-x命令（该配置已经绑定在M-x）来快速的查找适合的命令。
+本项目从原先的多语言编程 IDE 配置（2015-2024），转型为以**文本编辑与笔记管理**为核心的 Emacs 配置文件。
 
-* 强大的编辑能力
-    * undo-tree可以有效地管理你的编辑历史，提供类树形图形管理界面。
-    * helm-ring.el提供了一套工具，能够帮你展示之前你copy-cut(使用更准确的emacs用语kill)的内容，本配置中使用M-y(命令helm-show-kill-ring）就能展示你的编辑历史中使用过的编辑历史，使用C-n,C-p可以来回查看，RET（回车）即可把内容复制到当前的光标位置。
-* 拥有几套theme，可以耍酷。
-    * 自动识别代码文件的编码（使用unicad)
-* 当前emacs自带的package也非常强大，比如，org-mode非常适合写作和管理TODO-LIST。
-* 自动加载配置文件依赖的包文件。
-    * 个别还未纳入package archives管理的包，放在manual-install目录下管理（包括自动识别文件编码的unicad)
-* 可以不依赖于系统提供的外部输入法，使用chinese-pyim包，无缝的在中英文输入之间切换（其实还是有点缝...)
+> **当前分支**：`emacs30-upgrade` — 目标 Emacs 30+，已完成编程功能裁剪、现代化补全替换和笔记系统集成。
 
-# 使用方法简介
-## emacs安装：
-当然需要先安装emacs，mac系统个人推荐 http://emacsformacosx.com/  。
+## 变更历史
 
-## 配置文件的使用
-使用方法:  
-<pre><code>
-cd
+### v2.0 — Emacs 30 升级（emacs30-upgrade 分支）
+
+- **移除**：C/C++、PHP、Python、Java、Common Lisp 等编程语言专属配置
+- **移除**：GNU GLOBAL（GTAGS）、CEDET、ECB、Eclim、Flycheck、Company 等开发工具
+- **新增**：Vertico + Consult + Marginalia + Orderless + Embark 现代补全方案（替代 Helm）
+- **新增**：Denote + Org-roam + Org-crypt 笔记管理系统
+- **迁移**：全部 `defadvice` 替换为 `advice-add`
+- **精简**：配置文件从 ~2000 行缩减为 ~1200 行
+
+### v1.x — 多语言 IDE（master 分支，存档）
+
+- 基于 tuhdo 配置修改
+- 支持 C/C++、PHP、Python、Java、Common Lisp
+- Helm + GTAGS 代码导航
+- Company 代码补全
+
+---
+
+## 当前特性
+
+### 文本编辑增强
+
+| 特性 | 包 | 说明 |
+|------|----|------|
+| 结构化编辑 | smartparens | 括号、引号自动配对和结构化操作 |
+| 代码片段 | yasnippet | 文本扩展和模板 |
+| 增量搜索 | isearch + anzu | 搜索计数和替换预览 |
+| 多光标编辑 | iedit | 同时编辑多处相同文本 |
+| 区域扩展 | expand-region | 按语义逐步扩大选区 |
+| 撤销树 | undo-tree | 可视化撤销历史 |
+| 智能缩进 | dtrt-indent + clean-aindent | 自动检测和修正缩进 |
+| 注释 | comment-dwim-2 | 智能注释/取消注释 |
+| 历史粘贴 | consult-yank | 浏览 kill-ring 历史 |
+| 重复行 | duplicate-thing | 快速复制当前行或选区 |
+
+### 笔记管理
+
+| 特性 | 包 | 说明 |
+|------|----|------|
+| 笔记管理 | Denote | 基于文件命名规范的笔记系统 |
+| 双向链接 | Org-roam | 类 Roam Research 的知识图谱 |
+| 条目加密 | Org-crypt | GPG 加密 org 文档中的敏感条目 |
+| 现代化显示 | Org-modern | 美化 org-mode 的视觉呈现 |
+| 快速捕获 | Org-capture | 快速记录想法和待办事项 |
+| Markdown 编辑 | markdown-mode | 完整的 Markdown 编辑支持 |
+
+### 现代补全（替代 Helm）
+
+| 包 | 用途 |
+|---|------|
+| Vertico | 垂直补全 UI |
+| Consult | 增强命令（buffer、文件、搜索、register） |
+| Marginalia | 补全候选的注解信息 |
+| Orderless | 灵活的多关键词模糊匹配 |
+| Embark | 上下文操作菜单和批量操作 |
+
+### 文件与窗口管理
+
+| 特性 | 包 |
+|------|-----|
+| 文件管理 | Dired + Dired-X + Wdired + Recentf |
+| 目录对比 | ztree-diff |
+| 大文件查看 | vlf |
+| 窗口布局 | winner-mode + windmove + golden-ratio |
+| 终端 | Eshell + shell-pop |
+| 版本控制 UI | diff-hl |
+
+### UI/UX
+
+- 主题：grandshell（dark）
+- 光标处符号高亮（highlight-symbol）
+- 自动编码识别（unicad）
+- UTF-8 默认编码
+- macOS 兼容（自动读取 shell PATH）
+
+---
+
+## 快速开始
+
+### 安装
+
+```bash
+cd ~
 git clone https://github.com/quanyufang/emacs-config-files .emacs.d
-</code></pre>
+cd .emacs.d
+git checkout emacs30-upgrade
+```
 
-## 常用命令
-我整理了该配置下可以使用的命令，还比较初级，但基本常用的都能找到 ，见  [EmacsCommand.md](https://github.com/quanyufang/emacs-config-files/blob/master/EmacsCommand.md "")
+### 前置依赖
 
-# 注意事项：
-* 第一次打开运行eamcs时，需要下载所有依赖的包，需要消耗一些时间，主要是从melpa.milkbox.net下载需要的包。
-* 最近几次测试访问melpa.milkbox.net:80速度已经可以接受，但还是需要十分钟左右时间下载。
-* (or (= emacs-major-version 24) (= emacs-major-version 25))。低于24版的版本不行。如果当您使用到emacs25需要到php-mode 下执行rm *.elc,具体的原因我还没有分析。
-* CentOS上面我使用源码安装GNU Global
+```bash
+# macOS（推荐）
+brew install gnupg          # org-crypt 加密所需
+brew install ripgrep        # consult-ripgrep 全文搜索
 
+# 创建笔记目录
+mkdir -p ~/notes
+```
 
-# python注意事项:
-1. 参考 http://tkf.github.io/emacs-jedi/latest/ 
-2. 我们把一些快捷键尽量统一了，可以参考custom/setup-programming.el
+### 生成 GPG 密钥（加密笔记用）
 
-# GTAGS使用(GNU GLOBAL)
-* 为什么选用GTAGS?
-    * 对GNU Global进行了解之后，特别是快速所以符号引用，对于阅读代码来说这个是非常高效的，这是对比etags的一个重要优势，但是支持得语言比etags少，比如Lisp就不支持，不过写Lisp程序的人也比较少。
-    * 确实更快，对比一般IDE，你可以在每次操作赢得1秒以上的操作性能和数秒的查询性能（当然IDE也在改进），这个数是我的主观体验。而且我说的是你在8G+ 内存和SSD硬盘这样的机器上。
-    * 建立的索引更多。
-* 这个配置中为方便使用GTAGS做了哪些定制？
-    * 尽量统一不同语言使用GTAGS的快捷键。
-* 外部依赖
-    * 这个配置中C/C++和PHP代码使用gtags，在OS X上面使用Homebrew安装global即可。安装完成之后，在项目目录下面执行gtags，也可以使用helm提供的命令直接在emacs内部生产和更新tags(helm-gtags-update-tags)
+```bash
+gpg --full-generate-key     # 按提示操作
+gpg --list-keys             # 确认密钥存在
+```
 
+### 首次启动
 
-# Lisp注意事项:
-1. 目前gtags还不支持lisp语言，使用etags来建立标签: 
-示例：find . -name "*.el"|xargs etags。
+启动 Emacs 后等待包自动安装（约 3-5 分钟）。安装完成后即可正常使用。
 
+---
 
-# flycheck的说明：
+## 常用快捷键
 
-1.通过执行 M-x flycheck-verify-setup 检查当前语言需要的lint工具是否准备好了
+### 核心操作
 
-2.不同的语言需要在不同的OS下，需要的lint工具有所不同，查询对应的安装工具来安装相应的工具。我在OS X下使用Homebrew安装相应工具，比如php语言的支持
-brew install homebrew/php/php-code-sniffer homebrew/php/phpmd
+| 按键 | 功能 |
+|------|------|
+| `M-x` | 执行命令（Vertico 垂直补全） |
+| `C-x b` | 切换 buffer（consult-buffer） |
+| `C-x C-f` | 打开文件 |
+| `M-y` | 浏览 kill-ring 历史（consult-yank） |
+| `C-c s` | 搜索当前 buffer（consult-line） |
+| `C-c S` | 全文递归搜索（consult-ripgrep） |
+| `C-x r j` | 跳转到 register（consult-register） |
+| `C-.` | 上下文操作菜单（embark-act） |
+| `C-h C-f` | 搜索命令和函数（consult-apropos） |
+
+### 编辑操作
+
+| 按键 | 功能 |
+|------|------|
+| `C-a` | 智能行首（缩进位置/行首切换） |
+| `C-o` | 智能开行（下方插入空行并缩进） |
+| `M-o` | 上方开行 |
+| `C-c i` | 格式化整个 buffer 或选区 |
+| `M-;` | 注释/取消注释 |
+| `M-c` | 重复当前行/选区 |
+| `M-m` | 按语义扩展选区 |
+| `C-;` | iedit 多光标编辑 |
+| `C-c w` | 显示/隐藏空白字符 |
+
+### 笔记管理（C-c n 前缀）
+
+| 按键 | 功能 |
+|------|------|
+| `C-c n d` | 新建笔记（Denote） |
+| `C-c n f` | 查找或创建笔记 |
+| `C-c n r` | 重命名笔记文件 |
+| `C-c n k` | 添加关键词 |
+| `C-c n l` | 创建链接 |
+| `C-c n o` | 查找 Org-roam 节点 |
+| `C-c n i` | 插入双向链接 |
+| `C-c n t` | 添加标签 |
+| `C-c n g` | 显示知识图谱 |
+| `C-c n c` | 加/解密当前条目 |
+| `C-c c` | 快速捕获 |
+
+### 窗口管理
+
+| 按键 | 功能 |
+|------|------|
+| `C-x 1` | 智能关闭其他窗口（可恢复） |
+| `C-x 5 2` | 新建 Frame |
+| `C-x w f` | 全屏切换 |
+| `S-<left>` / `S-<right>` 等 | 在窗口间移动光标（windmove） |
+| `C-c t` | 弹出/隐藏终端（shell-pop） |
+
+---
+
+## 目录结构
+
+```
+~/.emacs.d/
+├── init.el                           # 主配置文件
+├── custom/                           # 模块化配置
+│   ├── custom-built-in-functions.el  # 通用编辑增强
+│   ├── mylib.el                      # 工具函数
+│   ├── setup-editing.el              # 编辑核心配置
+│   ├── setup-vertico.el              # Vertico+Consult 补全
+│   ├── setup-denote.el               # 笔记系统
+│   ├── setup-files.el                # 文件管理
+│   ├── setup-faces-and-ui.el         # 主题/UI
+│   ├── setup-convenience.el          # 便捷功能
+│   ├── setup-environment.el          # 环境设置
+│   ├── setup-help.el                 # 帮助系统
+│   ├── setup-external.el             # 终端/Shell
+│   ├── setup-applications.el         # Eshell
+│   ├── setup-communication.el        # 通信
+│   ├── setup-data.el                 # 数据保存
+│   ├── setup-text.el                 # 文本模式
+│   └── setup-local.el                # 本地配置（不提交）
+├── EmacsCommand.md                   # 详细命令文档
+└── EmacsEssential.md                 # Emacs 基础知识
+```
+
+---
+
+## 注意事项
+
+- **Emacs 版本**：需要 Emacs 29+（推荐 30+）
+- **首次启动**：需等待包下载安装
+- **macOS**：自动从 shell 读取 PATH
+- **备份文件**：自动保存在 `~/.backups/`
+- **加密笔记**：需要安装 GPG 并生成密钥

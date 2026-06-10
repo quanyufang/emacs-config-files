@@ -10,8 +10,8 @@
 
 ;;; Package setup
 (require 'package)
-(setq package-archives '(("gnu" . "https://elpa.gnu.org/packages/")))
-(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+(setq package-archives '(("melpa" . "https://melpa.org/packages/")
+                         ("gnu"   . "https://elpa.gnu.org/packages/")))
 (package-initialize)
 
 (custom-set-variables
@@ -68,6 +68,7 @@
   '(anzu
     clean-aindent-mode
     comment-dwim-2
+    consult
     denote
     diff-hl
     discover-my-major
@@ -100,38 +101,124 @@
     ws-butler
     yasnippet
     zygospore
-    ztree
-    consult))
+    ztree))
+
+;;; Robust package installation with error recovery
+(defvar packages-failed '()
+  "List of packages that failed to install during startup.")
+
+(defun package-refresh-with-retry (&optional max-retries)
+  "Refresh package archives with retry on failure."
+  (let ((retries (or max-retries 3))
+        (success nil))
+    (while (and (> retries 0) (not success))
+      (condition-case err
+          (progn
+            (package-refresh-contents)
+            (setq success t))
+        (error
+         (setq retries (1- retries))
+         (if (> retries 0)
+             (message "Package refresh failed, retrying (%d attempts left)... %s"
+                      retries (error-message-string err))
+           (message "WARNING: Package refresh failed after all retries: %s"
+                    (error-message-string err))))))))
 
 (defun install-packages ()
-  "Install all required packages."
+  "Install all required packages with per-package error handling."
   (interactive)
+  ;; Refresh archives if needed
   (unless package-archive-contents
-    (package-refresh-contents))
-  (dolist (package packages-need)
-    (unless (package-installed-p package)
-      (package-install package))))
+    (message "Refreshing package archives, please wait...")
+    (package-refresh-with-retry))
+
+  ;; Check which packages need installing
+  (let ((to-install
+         (seq-filter (lambda (p) (not (package-installed-p p)))
+                     packages-need)))
+    (if (null to-install)
+        (message "All %d required packages are already installed."
+                 (length packages-need))
+      (message "Installing %d new package(s) of %d total..."
+               (length to-install) (length packages-need))
+
+      ;; Install one by one with error handling
+      (dolist (package to-install)
+        (condition-case err
+            (progn
+              (message "  Installing %s..." (symbol-name package))
+              (package-install package))
+          (error
+           (message "  ERROR installing %s: %s"
+                    (symbol-name package)
+                    (error-message-string err))
+           (push package packages-failed)))))
+
+    ;; Summary
+    (let ((failed-count (length packages-failed)))
+      (cond
+       ((= failed-count 0)
+        (message "Package installation complete (%d installed)."
+                 (length to-install)))
+       ((< failed-count (length to-install))
+        (message "WARNING: %d package(s) failed to install: %s"
+                 failed-count
+                 (mapconcat #'symbol-name packages-failed ", ")))
+       (t
+        (message "WARNING: All package installations failed. Check network connection.")
+        (message "Failed packages: %s"
+                 (mapconcat #'symbol-name packages-failed ", ")))))))
 
 (install-packages)
 
-;;; Load custom modules
+;;; System dependency checks
+(defun check-system-dependencies ()
+  "Check for optional external tools and warn if missing."
+  (interactive)
+  (let ((optional-deps
+         '(("rg" . "ripgrep: install with `brew install ripgrep` (used by consult-ripgrep)")
+           ("gpg" . "GnuPG: install with `brew install gnupg` (required for org-crypt)")
+           ("gpg2" . "GnuPG: install with `brew install gnupg` (required for org-crypt)"))))
+    (dolist (dep optional-deps)
+      (unless (executable-find (car dep))
+        (display-warning 'init
+                         (format "Missing optional tool: %s" (cdr dep))
+                         :warning)))))
+
+(check-system-dependencies)
+
+;;; Load custom modules (with graceful degradation)
 (add-to-list 'load-path "~/.emacs.d/custom")
 
-(require 'custom-built-in-functions)
+;; Core modules (should always succeed)
 (require 'mylib)
-(require 'setup-convenience)
-(require 'setup-files)
-(require 'setup-text)
-(require 'setup-data)
-(require 'setup-external)
-(require 'setup-communication)
-(require 'setup-applications)
-(require 'setup-environment)
-(require 'setup-faces-and-ui)
-(require 'setup-help)
-(require 'setup-vertico)
-(require 'setup-denote)
-(require 'setup-editing)
+
+;; Conditionally load modules that depend on packages
+(defun safe-require (module &optional fallback-msg)
+  "Require MODULE, displaying FALLBACK-MSG on error but not crashing."
+  (condition-case err
+      (require module)
+    (error
+     (display-warning 'init
+                      (format "Failed to load %s: %s"
+                              (or fallback-msg (symbol-name module))
+                              (error-message-string err))
+                      :warning))))
+
+(safe-require 'custom-built-in-functions)
+(safe-require 'setup-convenience "Text convenience features")
+(safe-require 'setup-files "File management")
+(safe-require 'setup-text "Text mode configuration")
+(safe-require 'setup-data "Data persistence")
+(safe-require 'setup-external "Terminal/shell integration")
+(safe-require 'setup-communication "Communication features")
+(safe-require 'setup-applications "Eshell configuration")
+(safe-require 'setup-environment "Environment settings")
+(safe-require 'setup-faces-and-ui "Theme and UI")
+(safe-require 'setup-help "Help system")
+(safe-require 'setup-vertico "Vertico completion framework")
+(safe-require 'setup-denote "Note management system")
+(safe-require 'setup-editing "Text editing enhancements")
 
 ;;; General settings
 
@@ -182,8 +269,23 @@
                          (t
                           "[no file]")))))
 
+;;; Critical directories
+(defun ensure-directory (dir)
+  "Create directory DIR if it doesn't exist."
+  (unless (file-directory-p dir)
+    (make-directory dir t)
+    (message "Created directory: %s" dir)))
+
+(ensure-directory "~/notes/")
+
 ;;; Server for emacsclient
-(server-start)
+(condition-case err
+    (server-start)
+  (error
+   (display-warning 'init
+                    (format "Could not start Emacs server: %s"
+                            (error-message-string err))
+                    :warning)))
 
 ;;; Language & encoding
 (set-language-environment "UTF-8")
@@ -199,3 +301,16 @@
  )
 
 (put 'narrow-to-region 'disabled nil)
+
+;;; Startup summary
+(add-hook 'after-init-hook
+          (lambda ()
+            (let ((msg (format "Emacs %d ready — %d packages loaded"
+                               emacs-major-version
+                               (length packages-need))))
+              (when packages-failed
+                (setq msg (concat msg
+                                  (format " (%d failed: %s)"
+                                          (length packages-failed)
+                                          (mapconcat #'symbol-name packages-failed ", ")))))
+              (message msg))))
