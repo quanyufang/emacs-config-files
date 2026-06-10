@@ -2,10 +2,8 @@
 
 (provide 'setup-denote)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Denote: file-naming based notes     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(require 'denote)
+;; Gracefully skip if core packages are not installed
+(when (require 'denote nil t)
 
 (setq denote-directory (expand-file-name "~/notes/"))
 (setq denote-known-keywords '("emacs" "notes" "writing" "reading" "project" "idea"))
@@ -143,3 +141,5 @@
 ;;; │ C-c n c  │ org-encrypt-entry                   │
 ;;; │ C-c c    │ org-capture                         │
 ;;; └──────────┴─────────────────────────────────────┘
+
+)  ; end of when denote is available

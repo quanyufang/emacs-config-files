@@ -2,10 +2,8 @@
 
 (provide 'setup-vertico)
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Vertico: vertical completion UI     ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(require 'vertico)
+;; Gracefully skip if core packages are not installed
+(when (require 'vertico nil t)
 (vertico-mode 1)
 
 ;; Grow the minibuffer vertically
@@ -138,3 +136,5 @@
 ;;; │ C-h C-f      │ consult-apropos                     │
 ;;; │ C-h r        │ consult-info                        │
 ;;; └──────────────┴─────────────────────────────────────┘
+
+)  ; end of when vertico is available

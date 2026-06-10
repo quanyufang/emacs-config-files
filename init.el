@@ -103,10 +103,50 @@
     zygospore
     ztree))
 
-;;; Robust package installation with error recovery
-(defvar packages-failed '()
-  "List of packages that failed to install during startup.")
+;;; ── Fast local check (no network) ───────────────────────────
+(defun packages-missing ()
+  "Return list of required packages not yet installed, purely from local cache."
+  (seq-filter (lambda (p) (not (package-installed-p p)))
+              packages-need))
 
+;;; ── Background update checker ──────────────────────────────
+(defvar packages-update-checked-p nil
+  "Non-nil when the idle update check has already run this session.")
+
+(defun packages--idle-check-for-updates ()
+  "Run in idle timer: check for upgradable packages and notify the user."
+  (when (and (not packages-update-checked-p)
+             package-archive-contents)
+    (let ((upgradable
+           (seq-filter
+            (lambda (p)
+              (let ((installed (cadr (assq (car p) package-alist))))
+                (and installed (version-list-< (package-desc-version installed)
+                                               (package-desc-version (cadr p))))))
+            package-archive-contents)))
+      (setq packages-update-checked-p t)
+      (when upgradable
+        (message "📦 %d package(s) have updates available — M-x emacs-update-packages to review"
+                 (length upgradable))))))
+
+(run-with-idle-timer 30 nil #'packages--idle-check-for-updates)
+
+;;; ── Startup status report ─────────────────────────────────
+(add-hook 'after-init-hook
+          (lambda ()
+            (let ((missing (packages-missing)))
+              (cond
+               (missing
+                (display-warning
+                 'init
+                 (format "%d package(s) need to be installed: %s\nM-x emacs-install-packages to install now."
+                         (length missing)
+                         (mapconcat #'symbol-name missing ", "))
+                 :warning))
+               (t
+                (message "All %d required packages are installed." (length packages-need)))))))
+
+;;; ── Interactive: install missing packages ──────────────────
 (defun package-refresh-with-retry (&optional max-retries)
   "Refresh package archives with retry on failure."
   (let ((retries (or max-retries 3))
@@ -119,57 +159,83 @@
         (error
          (setq retries (1- retries))
          (if (> retries 0)
-             (message "Package refresh failed, retrying (%d attempts left)... %s"
+             (message "Refresh failed, retrying (%d left)... %s"
                       retries (error-message-string err))
-           (message "WARNING: Package refresh failed after all retries: %s"
-                    (error-message-string err))))))))
+           (error "Package refresh failed: %s"
+                  (error-message-string err))))))))
 
-(defun install-packages ()
-  "Install all required packages with per-package error handling."
+(defun emacs-install-packages ()
+  "Install all required packages.  Refresh archives first, show progress.
+Call this if you see package warnings at startup."
   (interactive)
-  ;; Refresh archives if needed
-  (unless package-archive-contents
-    (message "Refreshing package archives, please wait...")
-    (package-refresh-with-retry))
+  (let ((missing (packages-missing)))
+    (if (null missing)
+        (message "All %d packages already installed." (length packages-need))
+      (message "Refreshing archives...")
+      (package-refresh-with-retry)
 
-  ;; Check which packages need installing
-  (let ((to-install
-         (seq-filter (lambda (p) (not (package-installed-p p)))
-                     packages-need)))
-    (if (null to-install)
-        (message "All %d required packages are already installed."
-                 (length packages-need))
-      (message "Installing %d new package(s) of %d total..."
-               (length to-install) (length packages-need))
+      (let ((ok 0) (fail nil) (total (length missing)))
+        (dolist (p missing)
+          (message "  [%d/%d] Installing %s..." (1+ ok) total (symbol-name p))
+          (condition-case err
+              (progn
+                (package-install p)
+                (setq ok (1+ ok)))
+            (error
+             (let ((msg (error-message-string err)))
+               (if (string-match-p "Not found" msg)
+                   ;; Stale cache: refresh once and retry
+                   (progn
+                     (message "  Stale cache for %s, refreshing..." (symbol-name p))
+                     (package-refresh-contents)
+                     (condition-case err2
+                         (progn
+                           (package-install p)
+                           (setq ok (1+ ok)))
+                       (error
+                        (message "  ✗ %s" (error-message-string err2))
+                        (push (cons p msg) fail))))
+                 (message "  ✗ %s: %s" (symbol-name p) msg)
+                 (push (cons p msg) fail))))))
+        (message "Done: %d installed, %d failed (of %d total)."
+                 ok (length fail) total)
+        (when fail
+          (message "Failed: %s"
+                   (mapconcat (lambda (f) (format "%s" (car f))) fail ", ")))))))
 
-      ;; Install one by one with error handling
-      (dolist (package to-install)
-        (condition-case err
-            (progn
-              (message "  Installing %s..." (symbol-name package))
-              (package-install package))
-          (error
-           (message "  ERROR installing %s: %s"
-                    (symbol-name package)
-                    (error-message-string err))
-           (push package packages-failed)))))
-
-    ;; Summary
-    (let ((failed-count (length packages-failed)))
-      (cond
-       ((= failed-count 0)
-        (message "Package installation complete (%d installed)."
-                 (length to-install)))
-       ((< failed-count (length to-install))
-        (message "WARNING: %d package(s) failed to install: %s"
-                 failed-count
-                 (mapconcat #'symbol-name packages-failed ", ")))
-       (t
-        (message "WARNING: All package installations failed. Check network connection.")
-        (message "Failed packages: %s"
-                 (mapconcat #'symbol-name packages-failed ", ")))))))
-
-(install-packages)
+;;; ── Interactive: check for and apply package updates ───────
+(defun emacs-update-packages ()
+  "Show a list of packages with available updates and offer to upgrade.
+Refreshes archive contents first, then presents a diff-like buffer."
+  (interactive)
+  (message "Checking for updates...")
+  (package-refresh-contents)
+  (let ((upgradable
+         (seq-filter
+          (lambda (p)
+            (let ((installed (cadr (assq (car p) package-alist))))
+              (and installed
+                   (version-list-< (package-desc-version installed)
+                                   (package-desc-version (cadr p))))))
+          package-archive-contents)))
+    (if (null upgradable)
+        (message "All packages are up to date.")
+      ;; Build a display buffer
+      (with-current-buffer (get-buffer-create "*Package Updates*")
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (format "Updates available for %d package(s):\n\n" (length upgradable)))
+          (dolist (p upgradable)
+            (let* ((name     (car p))
+                   (archive  (cadr p))
+                   (installed (cadr (assq name package-alist)))
+                   (old-ver  (package-version-join (package-desc-version installed)))
+                   (new-ver  (package-version-join (package-desc-version archive))))
+              (insert (format "  %-30s %s → %s\n" (symbol-name name) old-ver new-ver))))
+          (insert "\nPress 'u' to upgrade all, 'q' to quit.\n"))
+        (package-menu-mode)
+        (goto-char (point-min))
+        (pop-to-buffer (current-buffer))))))
 
 ;;; Load custom modules (with graceful degradation)
 (add-to-list 'load-path "~/.emacs.d/custom")
@@ -301,15 +367,4 @@
 
 (put 'narrow-to-region 'disabled nil)
 
-;;; Startup summary
-(add-hook 'after-init-hook
-          (lambda ()
-            (let ((msg (format "Emacs %d ready — %d packages loaded"
-                               emacs-major-version
-                               (length packages-need))))
-              (when packages-failed
-                (setq msg (concat msg
-                                  (format " (%d failed: %s)"
-                                          (length packages-failed)
-                                          (mapconcat #'symbol-name packages-failed ", ")))))
-              (message msg))))
+;;; Startup completed
