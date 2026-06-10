@@ -74,11 +74,21 @@
 
 ;; Fix grandshell-theme: Emacs 30 rejects nil face attributes, must use 'unspecified
 ;; The theme (last updated 2018) uses nil which now triggers warnings.
+;; Guard with facep — sh-heredoc/sh-quoted-exec are only defined in sh-script-mode.
+(defun fix-grandshell-faces ()
+  "Patch nil face attributes that Emacs 30 rejects."
+  (dolist (face-attr '((show-paren-match :background)
+                       (header-line :background)
+                       (sh-heredoc :foreground)
+                       (sh-quoted-exec :foreground)))
+    (when (facep (car face-attr))
+      (set-face-attribute (car face-attr) nil (cadr face-attr) 'unspecified))))
+
 (when (>= emacs-major-version 30)
-  (set-face-attribute 'show-paren-match nil :background 'unspecified)
-  (set-face-attribute 'header-line nil :background 'unspecified)
-  (set-face-attribute 'sh-heredoc nil :foreground 'unspecified)
-  (set-face-attribute 'sh-quoted-exec nil :foreground 'unspecified))
+  ;; Fix faces that exist at startup
+  (fix-grandshell-faces)
+  ;; Also fix sh-mode faces when shell scripts are opened
+  (add-hook 'sh-mode-hook #'fix-grandshell-faces))
 
 ;; define global-font-lock-mode
 (setq font-lock-maximum-decoration 4)
