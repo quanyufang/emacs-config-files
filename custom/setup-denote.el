@@ -74,9 +74,10 @@
    (org-map-entries
     (lambda ()
       (when (org-at-encrypted-entry-p)
-        (if (fboundp 'org-fold-hide-entry)
-            (org-fold-hide-entry)
-          (org-hide-entry))))
+        (with-silent-modifications
+          (if (fboundp 'org-fold-hide-entry)
+              (org-fold-hide-entry)
+            (org-hide-entry)))))
     "crypt" 'file)))
 (add-hook 'org-mode-hook #'org-crypt--hide-all-encrypted-entries)
 
@@ -90,9 +91,10 @@
       (let ((beg (match-beginning 0)))
         (when (re-search-forward "-----END PGP MESSAGE-----" nil t)
           (let ((end (match-end 0)))
-            (add-text-properties beg end
-                                 '(read-only t
-                                   help-echo "Encrypted — use C-c n c to decrypt"))))))))
+            (with-silent-modifications
+              (add-text-properties beg end
+                                   '(read-only t
+                                     help-echo "Encrypted — use C-c n c to decrypt")))))))))
 (add-hook 'org-mode-hook #'org-crypt--protect-encrypted-blocks)
 (add-hook 'after-save-hook #'org-crypt--protect-encrypted-blocks)
 

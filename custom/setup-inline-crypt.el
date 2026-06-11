@@ -1,13 +1,18 @@
 ;;; setup-inline-crypt.el --- Inline text encryption with GPG for any buffer
 ;;
 ;; Usage:
-;;   C-c e   - encrypt selected region (→ PGP block)
-;;   C-c d   - decrypt PGP block at point (→ plaintext, editable)
+;;   C-c e   - encrypt selected region (→ 🔐 collapsed indicator)
+;;   C-c d   - decrypt block at point (→ plaintext, editable)
+;;   C-x C-s - save: re-encrypts any decrypted blocks (→ back to 🔐)
 ;;
-;; Encrypted blocks are wrapped in delimiters:
+;; Encrypted blocks are wrapped in delimiters (stored collapsed as 🔐):
 ;;   org-mode:  #+BEGIN_gpg ... #+END_gpg
 ;;   markdown:  <!--gpg: ... -->
 ;;   otherwise: ----BEGIN PGP MESSAGE---- ... ----END PGP MESSAGE----
+;;
+;; The full PGP ciphertext is hidden behind a 🔐 indicator.
+;; Use C-c d on 🔐 to decrypt and view/edit the content.
+;; Set `inline-crypt-collapse-encrypted' to nil to show the full ciphertext.
 
 (provide 'setup-inline-crypt)
 
@@ -43,15 +48,35 @@
   :type 'string
   :group 'inline-crypt)
 
-;;; Encrypted block face
+;;; Collapse encrypted blocks (compact display)
+(defcustom inline-crypt-collapse-encrypted t
+  "When non-nil, collapse encrypted blocks to a compact lock indicator.
+The full PGP message text is hidden behind a short indicator string.
+Use `C-c d' on the indicator to decrypt and reveal the content."
+  :type 'boolean
+  :group 'inline-crypt)
+
+(defcustom inline-crypt-collapsed-indicator " 🔐 "
+  "String displayed in place of collapsed encrypted blocks."
+  :type 'string
+  :group 'inline-crypt)
+
+;;; Encrypted block faces
 (defface inline-crypt-encrypted-face
   '((t (:background "#2d1a3a" :foreground "#b39ddb" :extend t)))
-  "Face for encrypted text blocks."
+  "Face for encrypted text blocks (full display)."
   :group 'inline-crypt)
 
 (defface inline-crypt-decrypted-face
   '((t (:background "#1a3a2d" :foreground "#81c784" :extend t)))
   "Face for temporarily decrypted text blocks."
+  :group 'inline-crypt)
+
+(defface inline-crypt-collapsed-face
+  '((t (:background "#4a3570" :foreground "#d0c0ff" :weight bold
+        :box (:line-width 1 :color "#8b6fc0"))))
+  "Face for the collapsed encrypted block indicator.
+Looks like a compact tag/label in the text."
   :group 'inline-crypt)
 
 ;;; ── Delimiter helpers ──────────────────────────────────────
@@ -76,6 +101,76 @@
   "Regex to find end of an inline-crypt encrypted block."
   (concat "-----END PGP MESSAGE-----"
           "\\(?:\n" (regexp-quote inline-crypt-org-delimiter-end) "\\)?"))
+
+;;; ── Collapse / expand helpers ───────────────────────────────
+
+(defun inline-crypt--collapsed-at-point ()
+  "Return (beg . end) of the collapsed indicator at point, or nil."
+  (let ((pos (point)))
+    (cond
+     ((get-text-property pos 'inline-crypt-collapsed)
+      (let ((beg (previous-single-property-change (1+ pos) 'inline-crypt-collapsed))
+            (end (next-single-property-change pos 'inline-crypt-collapsed)))
+        (cons (or beg (point-min)) (or end (point-max)))))
+     ;; Check if point is just before a collapsed indicator
+     ((and (< pos (point-max))
+           (get-text-property (1+ pos) 'inline-crypt-collapsed))
+      (inline-crypt--collapsed-at-point))
+     ;; Check if point is just after a collapsed indicator
+     ((and (> pos (point-min))
+           (get-text-property (1- pos) 'inline-crypt-collapsed))
+      (inline-crypt--collapsed-at-point)))))
+
+(defun inline-crypt--expand-block (beg end)
+  "Remove the display property at BEG..END to reveal the underlying PGP block.
+Returns (new-beg . new-end) of the expanded PGP block, or nil on failure."
+  (when (get-text-property beg 'inline-crypt-collapsed)
+    (with-silent-modifications
+      (remove-text-properties beg end '(display nil inline-crypt-collapsed nil read-only nil keymap nil))
+      (add-text-properties beg end
+                           '(face inline-crypt-encrypted-face
+                             font-lock-face inline-crypt-encrypted-face
+                             inline-crypt-hidden t)))
+    (cons beg end)))
+
+(defun inline-crypt--collapse-block (beg end)
+  "Hide the encrypted block at BEG..END behind a lock indicator.
+Uses the `display' text property so the underlying ciphertext remains in the buffer.
+This is non-destructive: the original text is preserved for saving."
+  (when inline-crypt-collapse-encrypted
+    (let ((keymap (let ((map (make-sparse-keymap)))
+                    (define-key map (kbd "C-c d") #'inline-crypt-decrypt-at-point)
+                    map)))
+      (with-silent-modifications
+        (add-text-properties
+         beg end
+         `(face inline-crypt-collapsed-face
+           font-lock-face inline-crypt-collapsed-face
+           inline-crypt-collapsed t
+           inline-crypt-hidden t
+           read-only t
+           keymap ,keymap
+           display ,inline-crypt-collapsed-indicator
+           help-echo "Encrypted text — C-c d to decrypt"))))))
+
+;;; ── Scan and collapse existing blocks ────────────────────────
+
+(defun inline-crypt--collapse-all-in-buffer ()
+  "Find all plain PGP blocks in the buffer and collapse them."
+  (interactive)
+  (when inline-crypt-collapse-encrypted
+    (save-excursion
+      (goto-char (point-min))
+      (let ((count 0))
+        (while (re-search-forward "-----BEGIN PGP MESSAGE-----" nil t)
+          ;; Check this isn't already inside a collapsed block
+          (unless (get-text-property (point) 'inline-crypt-collapsed)
+            (let ((block (inline-crypt--find-block-bounds)))
+              (when block
+                (inline-crypt--collapse-block (car block) (cdr block))
+                (setq count (1+ count))))))
+        (when (> count 0)
+          (message "Collapsed %d encrypted block(s)." count))))))
 
 ;;; ── Find encrypted block at point ──────────────────────────
 
@@ -134,29 +229,41 @@
       (user-error "Encryption failed. Check GPG key availability"))
     (delete-region beg end)
     (let ((delims (inline-crypt--delimiters)))
-      (when (string-empty-p (car delims))
+      (unless (string-empty-p (car delims))
         (insert (car delims) "\n"))
       (insert encrypted)
-      (when (string-empty-p (cdr delims))
+      (unless (string-empty-p (cdr delims))
         (insert "\n" (cdr delims))))
-    ;; Apply encrypted face
+    ;; Apply encrypted face, then collapse
     (let ((block (inline-crypt--find-block-bounds)))
       (when block
         (add-text-properties (car block) (cdr block)
                              '(face inline-crypt-encrypted-face
-                               font-lock-face inline-crypt-encrypted-face))))
-    (message "Text encrypted (%d chars → %d chars). C-c d to decrypt."
-             (length plaintext) (length encrypted))))
+                               font-lock-face inline-crypt-encrypted-face))
+        (inline-crypt--collapse-block (car block) (cdr block))))
+    (message "Text encrypted (%d chars → %d chars). %s to decrypt."
+             (length plaintext) (length encrypted)
+             (if inline-crypt-collapse-encrypted
+                 "C-c d on 🔐"
+               "C-c d"))))
 
 ;;; ── Decrypt block at point ─────────────────────────────────
 
 ;;;###autoload
 (defun inline-crypt-decrypt-at-point ()
   "Decrypt the encrypted block at point, replacing it with plaintext.
+If point is on a collapsed 🔐 indicator, expand it first before decrypting.
 The plaintext is tracked so it can be re-encrypted before saving."
   (interactive)
   (unless (executable-find "gpg")
     (user-error "GPG not found.  Install with: brew install gnupg"))
+  ;; If point is on a collapsed indicator, expand it first
+  (let ((collapsed (inline-crypt--collapsed-at-point)))
+    (when collapsed
+      (let ((expanded (inline-crypt--expand-block (car collapsed) (cdr collapsed))))
+        (unless expanded
+          (user-error "Failed to expand collapsed block"))
+        (goto-char (cdr expanded)))))  ; jump to END so backward search finds PGP header
   (let* ((bounds (inline-crypt--find-block-bounds))
          (beg (car bounds))
          (end (cdr bounds)))
@@ -169,11 +276,13 @@ The plaintext is tracked so it can be re-encrypted before saving."
             (condition-case err
                 (epg-decrypt-string context armor)
               (error
-               (user-error "Decryption failed: %s" (error-message-string err))))))
-      ;; Replace with plaintext
-      (delete-region beg end)
-      (let ((ins-pos (point)))
-        (insert plaintext)
+               (user-error "Decryption failed: %s"
+                           (error-message-string err))))))
+      ;; Replace PGP block with plaintext (bypass read-only)
+      (let ((inhibit-read-only t))
+        (delete-region beg end)
+        (insert plaintext))
+      (let ((ins-pos beg))
         ;; Register for re-encryption on save
         (inline-crypt--register-decrypted ins-pos (point) plaintext)
         ;; Apply decrypted face
@@ -217,10 +326,14 @@ The plaintext is tracked so it can be re-encrypted before saving."
                       (insert encrypted)
                       (unless (string-empty-p (cdr delims))
                         (insert "\n" (cdr delims)))
-                      (add-text-properties
-                       ins-pos (point)
-                       `(face inline-crypt-encrypted-face
-                         font-lock-face inline-crypt-encrypted-face))
+                      ;; Find and collapse the newly inserted block
+                      (let ((new-block (inline-crypt--find-block-bounds)))
+                        (when new-block
+                          (add-text-properties
+                           (car new-block) (cdr new-block)
+                           '(face inline-crypt-encrypted-face
+                             font-lock-face inline-crypt-encrypted-face))
+                          (inline-crypt--collapse-block (car new-block) (cdr new-block))))
                       (setq re-encrypted (1+ re-encrypted))))))))))
       (setq inline-crypt--decrypted-blocks nil)
       (when (> re-encrypted 0)
@@ -242,7 +355,10 @@ Encrypted blocks are re-encrypted automatically when saving the buffer."
             (define-key map (kbd "C-c d") #'inline-crypt-decrypt-at-point)
             map)
   (if inline-crypt-mode
-      (add-hook 'before-save-hook #'inline-crypt--reencrypt-before-save nil t)
+      (progn
+        (add-hook 'before-save-hook #'inline-crypt--reencrypt-before-save nil t)
+        ;; Collapse any existing PGP blocks in the buffer
+        (run-with-idle-timer 0.1 nil #'inline-crypt--collapse-all-in-buffer))
     (remove-hook 'before-save-hook #'inline-crypt--reencrypt-before-save t))
   ;; Also hook into org-ctrl-c-ctrl-c to decrypt an org block easily
   (when (derived-mode-p 'org-mode)
@@ -251,8 +367,10 @@ Encrypted blocks are re-encrypted automatically when saving the buffer."
       (remove-hook 'org-ctrl-c-ctrl-c-hook #'inline-crypt--org-ctrl-c-ctrl-c t))))
 
 (defun inline-crypt--org-ctrl-c-ctrl-c ()
-  "If point is on an inline-crypt block, decrypt it.  For `org-ctrl-c-ctrl-c'."
-  (when (inline-crypt--find-block-bounds)
+  "If point is on an inline-crypt block (or collapsed 🔐), decrypt it.
+For `org-ctrl-c-ctrl-c'."
+  (when (or (inline-crypt--find-block-bounds)
+            (inline-crypt--collapsed-at-point))
     (inline-crypt-decrypt-at-point)
     t))  ; return t to indicate we handled it
 

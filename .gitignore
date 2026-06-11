@@ -42,3 +42,9 @@ Thumbs.db
 
 # Local machine-specific config (GPG keys, etc.)
 custom/setup-local.el
+
+ac-comphist.dat
+inline-crypt-analysis.md
+recentf
+semanticdb/
+transient/
