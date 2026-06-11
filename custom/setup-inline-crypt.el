@@ -374,6 +374,24 @@ For `org-ctrl-c-ctrl-c'."
     (inline-crypt-decrypt-at-point)
     t))  ; return t to indicate we handled it
 
+;;; ── Auto-collapse PGP blocks when org entries are unfolded ──
+
+(defun inline-crypt--after-org-fold-change (&rest _args)
+  "Scan and collapse any newly visible PGP blocks after org fold state changes.
+This ensures that when an org-crypt encrypted entry is unfolded,
+the PGP ciphertext inside is displayed as 🔐 instead of raw text.
+Accepts &rest ARGS to be compatible with various org hook signatures."
+  (when (and inline-crypt-mode inline-crypt-collapse-encrypted)
+    ;; Small delay to let org finish its folding logic first
+    (run-with-idle-timer 0.05 nil #'inline-crypt--collapse-all-in-buffer)))
+
+;; Hook into org's post-fold mechanism to catch unfold events
+(with-eval-after-load 'org-fold
+  (add-hook 'org-fold-post-fold-state-change-hook #'inline-crypt--after-org-fold-change))
+
+;; Fallback for older org versions using org-hide-entry
+(add-hook 'org-cycle-hook #'inline-crypt--after-org-fold-change)
+
 ;;; ── Enable in relevant modes by default ────────────────────
 (add-hook 'org-mode-hook #'inline-crypt-mode)
 (add-hook 'markdown-mode-hook #'inline-crypt-mode)
