@@ -246,9 +246,11 @@ The overlay approach avoids conflicts with font-lock."
   (unless (region-active-p)
     (user-error "No region selected"))
   (let* ((plaintext (buffer-substring-no-properties beg end))
+         ;; Encode multibyte text to UTF-8 binary before encryption
+         (plaintext-bytes (encode-coding-string plaintext 'utf-8))
          (context (epg-make-context 'OpenPGP))
          (keys (ignore-errors (epg-list-keys context inline-crypt-gpg-key)))
-         (encrypted (epg-encrypt-string context plaintext
+         (encrypted (epg-encrypt-string context plaintext-bytes
                                         (or keys (epg-list-keys context)))))
     (unless encrypted
       (user-error "Encryption failed. Check GPG key availability"))
@@ -296,12 +298,14 @@ The plaintext is tracked so it can be re-encrypted before saving."
     ;; Extract and decrypt
     (let* ((armor (buffer-substring-no-properties beg end))
            (context (epg-make-context 'OpenPGP))
-           (plaintext
+           (raw-plaintext
             (condition-case err
                 (epg-decrypt-string context armor)
               (error
                (user-error "Decryption failed: %s"
-                           (error-message-string err))))))
+                           (error-message-string err)))))
+           ;; Decode binary string to UTF-8 text for proper multibyte handling
+           (plaintext (decode-coding-string raw-plaintext 'utf-8)))
       ;; Replace PGP block with plaintext (bypass read-only)
       (let ((inhibit-read-only t))
         (delete-region beg end)
@@ -337,8 +341,10 @@ The plaintext is tracked so it can be re-encrypted before saving."
                 (let* ((context (epg-make-context 'OpenPGP))
                        (keys (ignore-errors
                                (epg-list-keys context inline-crypt-gpg-key)))
+                       ;; Encode to UTF-8 binary before encryption
+                       (text-bytes (encode-coding-string current-text 'utf-8))
                        (encrypted (epg-encrypt-string
-                                   context current-text
+                                   context text-bytes
                                    (or keys (epg-list-keys context)))))
                   (when encrypted
                     (delete-region beg end)
