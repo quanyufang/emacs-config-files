@@ -104,6 +104,9 @@ Looks like a compact tag/label in the text."
 
 ;;; ── Collapse / expand helpers ───────────────────────────────
 
+(defvar-local inline-crypt--overlays nil
+  "List of overlays used to display collapsed encrypted blocks.")
+
 (defun inline-crypt--collapsed-at-point ()
   "Return (beg . end) of the collapsed indicator at point, or nil."
   (let ((pos (point)))
@@ -122,35 +125,46 @@ Looks like a compact tag/label in the text."
       (inline-crypt--collapsed-at-point)))))
 
 (defun inline-crypt--expand-block (beg end)
-  "Remove the display property at BEG..END to reveal the underlying PGP block.
+  "Remove the overlay and text properties at BEG..END to reveal the underlying PGP block.
 Returns (new-beg . new-end) of the expanded PGP block, or nil on failure."
   (when (get-text-property beg 'inline-crypt-collapsed)
+    ;; Remove any overlays in this region
+    (dolist (ov (overlays-in beg end))
+      (when (overlay-get ov 'inline-crypt-overlay)
+        (delete-overlay ov)))
     (with-silent-modifications
-      (remove-text-properties beg end '(display nil inline-crypt-collapsed nil read-only nil keymap nil))
+      (remove-text-properties beg end '(inline-crypt-collapsed nil read-only nil keymap nil))
       (add-text-properties beg end
                            '(face inline-crypt-encrypted-face
-                             font-lock-face inline-crypt-encrypted-face
                              inline-crypt-hidden t)))
     (cons beg end)))
 
 (defun inline-crypt--collapse-block (beg end)
   "Hide the encrypted block at BEG..END behind a lock indicator.
-Uses the `display' text property so the underlying ciphertext remains in the buffer.
-This is non-destructive: the original text is preserved for saving."
+Uses an overlay with `display' property so the underlying ciphertext remains in the buffer.
+This is non-destructive: the original text is preserved for saving.
+The overlay approach avoids conflicts with font-lock."
   (when inline-crypt-collapse-encrypted
     (let ((keymap (let ((map (make-sparse-keymap)))
                     (define-key map (kbd "C-c d") #'inline-crypt-decrypt-at-point)
                     map)))
+      ;; Create an overlay for the display property
+      (let ((ov (make-overlay beg end nil t nil)))
+        (overlay-put ov 'display inline-crypt-collapsed-indicator)
+        (overlay-put ov 'face inline-crypt-collapsed-face)
+        (overlay-put ov 'inline-crypt-overlay t)
+        (overlay-put ov 'evaporate t)
+        (overlay-put ov 'keymap keymap)
+        (overlay-put ov 'help-echo "Encrypted text — C-c d to decrypt")
+        (push ov inline-crypt--overlays))
+      ;; Add text properties to mark the region
       (with-silent-modifications
         (add-text-properties
          beg end
-         `(face inline-crypt-collapsed-face
-           font-lock-face inline-crypt-collapsed-face
-           inline-crypt-collapsed t
+         `(inline-crypt-collapsed t
            inline-crypt-hidden t
            read-only t
            keymap ,keymap
-           display ,inline-crypt-collapsed-indicator
            help-echo "Encrypted text — C-c d to decrypt"))))))
 
 ;;; ── Scan and collapse existing blocks ────────────────────────
@@ -159,6 +173,11 @@ This is non-destructive: the original text is preserved for saving."
   "Find all plain PGP blocks in the buffer and collapse them."
   (interactive)
   (when inline-crypt-collapse-encrypted
+    ;; Clear existing overlays first to avoid duplicates
+    (dolist (ov inline-crypt--overlays)
+      (when (overlay-buffer ov)
+        (delete-overlay ov)))
+    (setq inline-crypt--overlays nil)
     (save-excursion
       (goto-char (point-min))
       (let ((count 0))
@@ -238,8 +257,7 @@ This is non-destructive: the original text is preserved for saving."
     (let ((block (inline-crypt--find-block-bounds)))
       (when block
         (add-text-properties (car block) (cdr block)
-                             '(face inline-crypt-encrypted-face
-                               font-lock-face inline-crypt-encrypted-face))
+                             '(face inline-crypt-encrypted-face))
         (inline-crypt--collapse-block (car block) (cdr block))))
     (message "Text encrypted (%d chars → %d chars). %s to decrypt."
              (length plaintext) (length encrypted)
@@ -288,7 +306,6 @@ The plaintext is tracked so it can be re-encrypted before saving."
         ;; Apply decrypted face
         (add-text-properties ins-pos (point)
                              `(face inline-crypt-decrypted-face
-                               font-lock-face inline-crypt-decrypted-face
                                inline-crypt-decrypted t))
         (message "Text decrypted (%d chars). Edit then save to re-encrypt."
                  (length plaintext))
@@ -331,8 +348,7 @@ The plaintext is tracked so it can be re-encrypted before saving."
                         (when new-block
                           (add-text-properties
                            (car new-block) (cdr new-block)
-                           '(face inline-crypt-encrypted-face
-                             font-lock-face inline-crypt-encrypted-face))
+                           '(face inline-crypt-encrypted-face))
                           (inline-crypt--collapse-block (car new-block) (cdr new-block))))
                       (setq re-encrypted (1+ re-encrypted))))))))))
       (setq inline-crypt--decrypted-blocks nil)
@@ -359,7 +375,13 @@ Encrypted blocks are re-encrypted automatically when saving the buffer."
         (add-hook 'before-save-hook #'inline-crypt--reencrypt-before-save nil t)
         ;; Collapse any existing PGP blocks in the buffer
         (run-with-idle-timer 0.1 nil #'inline-crypt--collapse-all-in-buffer))
-    (remove-hook 'before-save-hook #'inline-crypt--reencrypt-before-save t))
+    (progn
+      ;; Clean up overlays when disabling mode
+      (dolist (ov inline-crypt--overlays)
+        (when (overlay-buffer ov)
+          (delete-overlay ov)))
+      (setq inline-crypt--overlays nil)
+      (remove-hook 'before-save-hook #'inline-crypt--reencrypt-before-save t)))
   ;; Also hook into org-ctrl-c-ctrl-c to decrypt an org block easily
   (when (derived-mode-p 'org-mode)
     (if inline-crypt-mode
@@ -383,7 +405,12 @@ the PGP ciphertext inside is displayed as 🔐 instead of raw text.
 Accepts &rest ARGS to be compatible with various org hook signatures."
   (when (and inline-crypt-mode inline-crypt-collapse-encrypted)
     ;; Small delay to let org finish its folding logic first
-    (run-with-idle-timer 0.05 nil #'inline-crypt--collapse-all-in-buffer)))
+    (let ((buf (current-buffer)))
+      (run-with-idle-timer 0.05 nil
+                           (lambda ()
+                             (when (buffer-live-p buf)
+                               (with-current-buffer buf
+                                 (inline-crypt--collapse-all-in-buffer))))))))
 
 ;; Hook into org's post-fold mechanism to catch unfold events
 (with-eval-after-load 'org-fold
