@@ -14,8 +14,6 @@
 ;; Use C-c d on 🔐 to decrypt and view/edit the content.
 ;; Set `inline-crypt-collapse-encrypted' to nil to show the full ciphertext.
 
-(provide 'setup-inline-crypt)
-
 (require 'epa)
 
 (defgroup inline-crypt nil
@@ -94,13 +92,13 @@ Looks like a compact tag/label in the text."
 (defun inline-crypt--armor-beg-re ()
   "Regex to find beginning of an inline-crypt encrypted block."
   (concat
-   "\\(" (regexp-quote inline-crypt-org-delimiter-begin) "\n\\)?"
+   "\\(" (regexp-quote inline-crypt-org-delimiter-begin) "\\n\\)?"
    "-----BEGIN PGP MESSAGE-----"))
 
 (defun inline-crypt--armor-end-re ()
   "Regex to find end of an inline-crypt encrypted block."
   (concat "-----END PGP MESSAGE-----"
-          "\\(?:\n" (regexp-quote inline-crypt-org-delimiter-end) "\\)?"))
+          "\\(?:\\n" (regexp-quote inline-crypt-org-delimiter-end) "\\)?"))
 
 ;;; ── Collapse / expand helpers ───────────────────────────────
 
@@ -151,7 +149,9 @@ The overlay approach avoids conflicts with font-lock."
       ;; Create an overlay for the display property
       (let ((ov (make-overlay beg end nil t nil)))
         (overlay-put ov 'display inline-crypt-collapsed-indicator)
-        (overlay-put ov 'face inline-crypt-collapsed-face)
+        (overlay-put ov 'face (if (facep 'inline-crypt-collapsed-face)
+                                  'inline-crypt-collapsed-face
+                                'warning))
         (overlay-put ov 'inline-crypt-overlay t)
         (overlay-put ov 'evaporate t)
         (overlay-put ov 'keymap keymap)
@@ -172,24 +172,30 @@ The overlay approach avoids conflicts with font-lock."
 (defun inline-crypt--collapse-all-in-buffer ()
   "Find all plain PGP blocks in the buffer and collapse them."
   (interactive)
+  (message "DEBUG: collapse-all-in-buffer called")
   (when inline-crypt-collapse-encrypted
-    ;; Clear existing overlays first to avoid duplicates
+    ;; Clear existing overlays and text properties first.
+    ;; This is necessary because org-fold may hide/show regions,
+    ;; leaving stale text properties while destroying overlays.
     (dolist (ov inline-crypt--overlays)
       (when (overlay-buffer ov)
         (delete-overlay ov)))
     (setq inline-crypt--overlays nil)
+    ;; Remove stale inline-crypt-collapsed properties from the entire buffer
+    (with-silent-modifications
+      (remove-text-properties (point-min) (point-max) '(inline-crypt-collapsed nil)))
     (save-excursion
       (goto-char (point-min))
       (let ((count 0))
         (while (re-search-forward "-----BEGIN PGP MESSAGE-----" nil t)
-          ;; Check this isn't already inside a collapsed block
-          (unless (get-text-property (point) 'inline-crypt-collapsed)
-            (let ((block (inline-crypt--find-block-bounds)))
-              (when block
-                (inline-crypt--collapse-block (car block) (cdr block))
-                (setq count (1+ count))))))
-        (when (> count 0)
-          (message "Collapsed %d encrypted block(s)." count))))))
+          (message "DEBUG: Found BEGIN at position %d, prop=%s"
+                   (point) (get-text-property (point) 'inline-crypt-collapsed))
+          (let ((block (inline-crypt--find-block-bounds)))
+            (message "DEBUG: block bounds=%s" block)
+            (when block
+              (inline-crypt--collapse-block (car block) (cdr block))
+              (setq count (1+ count)))))
+        (message "DEBUG: Total collapsed: %d" count)))))
 
 ;;; ── Find encrypted block at point ──────────────────────────
 
@@ -403,17 +409,25 @@ For `org-ctrl-c-ctrl-c'."
 This ensures that when an org-crypt encrypted entry is unfolded,
 the PGP ciphertext inside is displayed as 🔐 instead of raw text.
 Accepts &rest ARGS to be compatible with various org hook signatures."
+  (message "DEBUG: inline-crypt--after-org-fold-change called, mode=%s collapse=%s"
+           inline-crypt-mode inline-crypt-collapse-encrypted)
   (when (and inline-crypt-mode inline-crypt-collapse-encrypted)
     ;; Small delay to let org finish its folding logic first
-    (let ((buf (current-buffer)))
+    (let ((target-buffer (current-buffer)))
+      (message "DEBUG: scheduling collapse for buffer %s" target-buffer)
       (run-with-idle-timer 0.05 nil
-                           (lambda ()
+                           (lambda (buf)
+                             (message "DEBUG: timer fired for buffer %s, live=%s"
+                                      buf (buffer-live-p buf))
                              (when (buffer-live-p buf)
                                (with-current-buffer buf
-                                 (inline-crypt--collapse-all-in-buffer))))))))
+                                 (message "DEBUG: calling collapse-all-in-buffer")
+                                 (inline-crypt--collapse-all-in-buffer))))
+                           target-buffer))))
 
 ;; Hook into org's post-fold mechanism to catch unfold events
 (with-eval-after-load 'org-fold
+  (message "DEBUG: org-fold loaded, adding hook")
   (add-hook 'org-fold-post-fold-state-change-hook #'inline-crypt--after-org-fold-change))
 
 ;; Fallback for older org versions using org-hide-entry
@@ -423,3 +437,5 @@ Accepts &rest ARGS to be compatible with various org hook signatures."
 (add-hook 'org-mode-hook #'inline-crypt-mode)
 (add-hook 'markdown-mode-hook #'inline-crypt-mode)
 (add-hook 'text-mode-hook #'inline-crypt-mode)
+
+(provide 'setup-inline-crypt)
