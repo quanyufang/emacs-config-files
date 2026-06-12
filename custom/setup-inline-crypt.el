@@ -143,23 +143,79 @@ Checks the current line and the line immediately above."
 (defvar-local inline-crypt--overlays nil
   "List of overlays used to display collapsed encrypted blocks.")
 
+(defvar-local inline-crypt--protect-overlays nil
+  "Overlays that block edits to visible ciphertext regions.")
+
+(defconst inline-crypt--pgp-begin "-----BEGIN PGP MESSAGE-----"
+  "Literal start marker for inline PGP armor blocks.")
+
+(defconst inline-crypt--pgp-end "-----END PGP MESSAGE-----"
+  "Literal end marker for inline PGP armor blocks.")
+
+(defun inline-crypt--deny-insert (_ov _before-p)
+  "Hook that prevents inserting into a protected ciphertext region."
+  (user-error "Cannot modify encrypted ciphertext"))
+
+(defun inline-crypt--clear-protect-overlays (&optional beg end)
+  "Remove ciphertext protection overlays, optionally limited to BEG..END."
+  (setq inline-crypt--protect-overlays
+        (delq nil
+              (mapcar
+               (lambda (ov)
+                 (if (not (overlay-buffer ov))
+                     nil
+                   (if (and beg end
+                            (not (and (>= (overlay-end ov) beg)
+                                      (<= (overlay-start ov) end))))
+                       ov
+                     (progn (delete-overlay ov) nil))))
+               inline-crypt--protect-overlays))))
+
+(defun inline-crypt--protect-overlay-at (beg end)
+  "Return the existing protect overlay for BEG..END, or nil."
+  (catch 'found
+    (dolist (ov (overlays-in beg end))
+      (when (and (overlay-get ov 'inline-crypt-protect)
+                 (= (overlay-start ov) beg)
+                 (= (overlay-end ov) end))
+        (throw 'found ov)))
+    nil))
+
+(defun inline-crypt--protect-armor-region (beg end)
+  "Make ciphertext BEG..END read-only using text properties and overlays."
+  (unless (inline-crypt--protect-overlay-at beg end)
+    (inline-crypt--clear-protect-overlays beg end)
+    (let ((keymap (inline-crypt--make-collapsed-keymap)))
+      (with-silent-modifications
+        (add-text-properties beg end
+                             `(read-only t
+                               front-sticky t
+                               rear-nonsticky t
+                               face inline-crypt-encrypted-face
+                               keymap ,keymap
+                               help-echo "Ciphertext (read-only) — C-c v hide, C-c d decrypt")))
+      (let ((ov (make-overlay beg end nil t nil)))
+        (overlay-put ov 'inline-crypt-protect t)
+        (overlay-put ov 'evaporate t)
+        (overlay-put ov 'insert-in-front-hooks (list #'inline-crypt--deny-insert))
+        (overlay-put ov 'insert-behind-hooks (list #'inline-crypt--deny-insert))
+        (overlay-put ov 'keymap keymap)
+        (push ov inline-crypt--protect-overlays)))))
+
 (defun inline-crypt--property-region-at-point (prop)
   "Return (beg . end) of text with property PROP at point, or nil."
   (let ((pos (point)))
-    (cond
-     ((get-text-property pos prop)
+    (unless (get-text-property pos prop)
+      (cond
+       ((and (< pos (point-max)) (get-text-property (1+ pos) prop))
+        (setq pos (1+ pos)))
+       ((and (> pos (point-min)) (get-text-property (1- pos) prop))
+        (setq pos (1- pos)))
+       (t (setq pos nil))))
+    (when (and pos (get-text-property pos prop))
       (let ((beg (previous-single-property-change (1+ pos) prop))
             (end (next-single-property-change pos prop)))
-        (cons (or beg (point-min)) (or end (point-max)))))
-     ((and (< pos (point-max))
-           (get-text-property (1+ pos) prop))
-      (goto-char (1+ pos))
-      (inline-crypt--property-region-at-point prop))
-     ((and (> pos (point-min))
-           (get-text-property (1- pos) prop))
-      (goto-char (1- pos))
-      (inline-crypt--property-region-at-point prop))
-     (t nil))))
+        (cons (or beg (point-min)) (or end (point-max)))))))
 
 (defun inline-crypt--collapsed-at-point ()
   "Return (beg . end) of the collapsed indicator at point, or nil."
@@ -171,24 +227,25 @@ Checks the current line and the line immediately above."
 
 (defun inline-crypt--armor-visible-at-point ()
   "Return (beg . end) of expanded-but-not-decrypted block at point, or nil."
-  (let ((bounds (inline-crypt--find-block-bounds)))
-    (when (and bounds
-               (get-text-property (point) 'inline-crypt-hidden)
-               (not (get-text-property (point) 'inline-crypt-decrypted)))
-      bounds)))
+  (and (not (inline-crypt--collapsed-at-point))
+       (let ((bounds (inline-crypt--find-block-bounds)))
+         (when (and bounds (not (get-text-property (car bounds) 'inline-crypt-decrypted)))
+           bounds))))
 
 (defun inline-crypt--expand-block (beg end)
   "Remove the overlay and text properties at BEG..END to reveal the underlying PGP block.
-Returns (new-beg . new-end) of the expanded PGP block, or nil on failure."
+The revealed ciphertext is read-only.  Returns (new-beg . new-end), or nil on failure."
   (when (get-text-property beg 'inline-crypt-collapsed)
     (dolist (ov (overlays-in beg end))
       (when (overlay-get ov 'inline-crypt-overlay)
         (delete-overlay ov)))
     (with-silent-modifications
-      (remove-text-properties beg end '(inline-crypt-collapsed nil read-only nil keymap nil))
-      (add-text-properties beg end
-                           '(face inline-crypt-encrypted-face
-                             inline-crypt-hidden t)))
+      (remove-text-properties beg end
+                              '(inline-crypt-collapsed nil read-only nil
+                                front-sticky nil rear-nonsticky nil
+                                keymap nil help-echo nil))
+      (add-text-properties beg end '(inline-crypt-hidden t)))
+    (inline-crypt--protect-armor-region beg end)
     (cons beg end)))
 
 (defun inline-crypt--collapse-block (beg end)
@@ -197,6 +254,7 @@ Uses an overlay with `display' property so the underlying ciphertext remains in 
 This is non-destructive: the original text is preserved for saving.
 The overlay approach avoids conflicts with font-lock."
   (when inline-crypt-collapse-encrypted
+    (inline-crypt--clear-protect-overlays beg end)
     (let ((keymap (inline-crypt--make-collapsed-keymap)))
       (let ((ov (make-overlay beg end nil t nil)))
         (overlay-put ov 'display inline-crypt-collapsed-indicator)
@@ -230,28 +288,60 @@ The overlay approach avoids conflicts with font-lock."
 
 ;;; ── Scan and collapse existing blocks ────────────────────────
 
+(defvar-local inline-crypt--collapsing nil
+  "Non-nil while `inline-crypt--collapse-all-in-buffer' is running.")
+
+(defvar-local inline-crypt--collapse-timer nil
+  "Idle timer for debounced collapse; prevents hook feedback loops.")
+
+(defun inline-crypt--block-already-collapsed-p (beg)
+  "Return non-nil if the PGP block starting near BEG is already collapsed."
+  (or (get-text-property beg 'inline-crypt-collapsed)
+      (catch 'found
+        (dolist (ov (overlays-in beg (min (point-max) (+ beg 512))))
+          (when (overlay-get ov 'inline-crypt-overlay)
+            (throw 'found t)))
+        nil)))
+
 (defun inline-crypt--collapse-all-in-buffer ()
-  "Find all plain PGP blocks in the buffer and collapse them."
+  "Find plain PGP blocks that still need collapsing and fold them to 🔐."
   (interactive)
-  (when inline-crypt-collapse-encrypted
-    (dolist (ov inline-crypt--overlays)
-      (when (overlay-buffer ov)
-        (delete-overlay ov)))
-    (setq inline-crypt--overlays nil)
-    (with-silent-modifications
-      (remove-text-properties (point-min) (point-max) '(inline-crypt-collapsed nil)))
-    (save-excursion
-      (goto-char (point-min))
-      (let ((count 0))
-        (while (re-search-forward "-----BEGIN PGP MESSAGE-----" nil t)
-          (unless (get-text-property (point) 'inline-crypt-decrypted)
-            (let ((block (inline-crypt--find-block-bounds)))
-              (when (and block
-                         (not (get-text-property (car block) 'inline-crypt-user-expanded)))
-                (inline-crypt--collapse-block (car block) (cdr block))
-                (setq count (1+ count))))))
-        (when (> count 0)
-          (message "Collapsed %d encrypted block(s)." count))))))
+  (when (and inline-crypt-collapse-encrypted (not inline-crypt--collapsing))
+    (let ((inline-crypt--collapsing t)
+          (count 0))
+      (save-excursion
+        (goto-char (point-min))
+        (while (re-search-forward (regexp-quote inline-crypt--pgp-begin) nil t)
+          (let ((hit (match-beginning 0)))
+            (unless (get-text-property hit 'inline-crypt-decrypted)
+              (goto-char hit)
+              (let ((block (inline-crypt--find-block-bounds)))
+                (when block
+                  (let ((bbeg (car block))
+                        (bend (cdr block)))
+                    (cond
+                     ((get-text-property bbeg 'inline-crypt-user-expanded)
+                      (inline-crypt--protect-armor-region bbeg bend))
+                     ((inline-crypt--block-already-collapsed-p bbeg)
+                      nil)
+                     (t
+                      (inline-crypt--collapse-block bbeg bend)
+                      (setq count (1+ count)))))))))))
+      (when (> count 0)
+        (message "Collapsed %d encrypted block(s)." count)))))
+
+(defun inline-crypt--schedule-collapse (&optional delay)
+  "Debounced wrapper around `inline-crypt--collapse-all-in-buffer'."
+  (let ((buf (current-buffer)))
+    (when inline-crypt--collapse-timer
+      (cancel-timer inline-crypt--collapse-timer))
+    (setq inline-crypt--collapse-timer
+          (run-with-idle-timer (or delay 0.2) nil
+                               (lambda ()
+                                 (setq inline-crypt--collapse-timer nil)
+                                 (when (buffer-live-p buf)
+                                   (with-current-buffer buf
+                                     (inline-crypt--collapse-all-in-buffer))))))))
 
 ;;; ── Find encrypted block at point ──────────────────────────
 
@@ -260,14 +350,21 @@ The overlay approach avoids conflicts with font-lock."
   (save-excursion
     (let ((orig (point))
           beg end)
-      (when (re-search-backward "-----BEGIN PGP MESSAGE-----" nil t)
-        (setq beg (point))
-        (let ((delim-beg (inline-crypt--opening-delimiter-at-point)))
+      (cond
+       ((looking-at inline-crypt--pgp-begin)
+        (setq beg (match-beginning 0)))
+       ((re-search-backward (regexp-quote inline-crypt--pgp-begin) nil t)
+        (setq beg (match-beginning 0)))
+       (t nil))
+      (when beg
+        (let ((delim-beg (save-excursion
+                           (goto-char beg)
+                           (inline-crypt--opening-delimiter-at-point))))
           (when delim-beg
             (setq beg delim-beg)))
         (goto-char beg)
-        (when (re-search-forward "-----END PGP MESSAGE-----" nil t)
-          (setq end (inline-crypt--extend-end-for-closing-delimiter (point)))
+        (when (re-search-forward (regexp-quote inline-crypt--pgp-end) nil t)
+          (setq end (inline-crypt--extend-end-for-closing-delimiter (match-end 0)))
           (when (and (<= beg orig) (<= orig end))
             (cons beg end)))))))
 
@@ -356,7 +453,7 @@ Does not decrypt — only changes display."
       (with-silent-modifications
         (add-text-properties beg end '(inline-crypt-user-expanded t)))
       (goto-char beg)
-      (message "Showing ciphertext (not decrypted). C-c v to hide, C-c d to decrypt.")))
+      (message "Showing ciphertext (read-only). C-c v to hide, C-c d to decrypt.")))
    ((inline-crypt--armor-visible-at-point)
     (let* ((bounds (inline-crypt--armor-visible-at-point))
            (beg (car bounds))
@@ -365,7 +462,13 @@ Does not decrypt — only changes display."
         (remove-text-properties beg end
                                 '(inline-crypt-user-expanded nil
                                   inline-crypt-hidden nil
+                                  read-only nil
+                                  front-sticky nil
+                                  rear-nonsticky nil
+                                  keymap nil
+                                  help-echo nil
                                   face nil)))
+      (inline-crypt--clear-protect-overlays beg end)
       (inline-crypt--collapse-block beg end)
       (message "Hidden ciphertext behind lock indicator.")))
    (t
@@ -406,6 +509,7 @@ The plaintext is tracked so it can be re-encrypted before saving."
         (delete-region beg end)
         (insert plaintext))
       (let ((ins-pos beg))
+        (inline-crypt--clear-protect-overlays beg end)
         (inline-crypt--register-decrypted ins-pos (point) plaintext armor)
         (with-silent-modifications
           (add-text-properties ins-pos (point)
@@ -526,12 +630,16 @@ Encrypted blocks are re-encrypted automatically when saving the buffer."
   (if inline-crypt-mode
       (progn
         (add-hook 'before-save-hook #'inline-crypt--reencrypt-before-save nil t)
-        (run-with-idle-timer 0.1 nil #'inline-crypt--collapse-all-in-buffer))
+        (inline-crypt--schedule-collapse 0.1))
     (progn
+      (when inline-crypt--collapse-timer
+        (cancel-timer inline-crypt--collapse-timer)
+        (setq inline-crypt--collapse-timer nil))
       (dolist (ov inline-crypt--overlays)
         (when (overlay-buffer ov)
           (delete-overlay ov)))
       (setq inline-crypt--overlays nil)
+      (inline-crypt--clear-protect-overlays)
       (remove-hook 'before-save-hook #'inline-crypt--reencrypt-before-save t)))
   (when (derived-mode-p 'org-mode)
     (if inline-crypt-mode
@@ -546,28 +654,13 @@ For `org-ctrl-c-ctrl-c'."
     (inline-crypt-decrypt-at-point)
     t))
 
-;;; ── Auto-collapse PGP blocks when org entries are unfolded ──
-
-(defun inline-crypt--after-org-fold-change (&rest _args)
-  "Scan and collapse any newly visible PGP blocks after org fold state changes.
-Skips blocks the user has manually expanded to view ciphertext."
-  (when (and inline-crypt-mode inline-crypt-collapse-encrypted)
-    (let ((target-buffer (current-buffer)))
-      (run-with-idle-timer 0.05 nil
-                           (lambda (buf)
-                             (when (buffer-live-p buf)
-                               (with-current-buffer buf
-                                 (inline-crypt--collapse-all-in-buffer))))
-                           target-buffer))))
-
-(with-eval-after-load 'org-fold
-  (add-hook 'org-fold-post-fold-state-change-hook #'inline-crypt--after-org-fold-change))
-
-(add-hook 'org-cycle-hook #'inline-crypt--after-org-fold-change)
-
 ;;; ── Enable in relevant modes by default ────────────────────
-(add-hook 'org-mode-hook #'inline-crypt-mode)
-(add-hook 'markdown-mode-hook #'inline-crypt-mode)
-(add-hook 'text-mode-hook #'inline-crypt-mode)
+;; Use (inline-crypt-mode 1) to enable explicitly — never toggle from hooks.
+(defun inline-crypt--turn-on ()
+  (inline-crypt-mode 1))
+
+(add-hook 'org-mode-hook #'inline-crypt--turn-on)
+(add-hook 'markdown-mode-hook #'inline-crypt--turn-on)
+(add-hook 'text-mode-hook #'inline-crypt--turn-on)
 
 (provide 'setup-inline-crypt)
