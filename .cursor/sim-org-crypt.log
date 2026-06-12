@@ -1,0 +1,40 @@
+BOUNDS beg=17 end=104 len=87
+EXTRACT="#+BEGIN_gpg
+-----BEGIN PGP MESSAGE-----
+fakecipher
+-----END PGP MESSAGE-----
+#+END_gpg
+"
+AT-ENCRYPTED-P=nil
+AFTER-ENCRYPT size=382
+AFTER-ENCRYPT="* test :crypt:
+
+-----BEGIN PGP MESSAGE-----
+
+hF4DCILbpZHLEfASAQdAI0kGIFLkLuj/bjUz5CU/E6MCQm60kXHuUFcaVy74/nUw
+AMg16w+qMDWNPtXUd5wZ6N1pgFVhef/x0ZWU6OCIBcE1CX8vH3tlVWk6u+UW08H/
+1H0BCQIQBxO3NvxRLgx3lc7TCo3ojk3bQLsQAomLo+4MabcB6UkpD5jUDbxhLM4e
++KNwdQFdYuy8Z/ULT5+0ypxnXfxkbHfcUD3CZnOSGYBM5nX38Ou8xaGfwPLOI5+i
+XnqOypUkuH731kwn647dxog3Osqx+SjFlnfvb4Je0A==
+=XIBx
+-----END PGP MESSAGE-----
+"
+BEFORE reencrypt size=33 content="* 这是秘密 :crypt:
+1234567
+#+END_gpg
+"
+AFTER inline reencrypt size=345 pgp=1 content=#("* 这是秘密 :crypt:
+#+BEGIN_gpg
+-----BEGIN PGP MESSAGE-----
+
+hF4DCILbpZHLEfASAQdA3V1fbTvAg1fC529JVVGrJdt54MAuAang9NnI6t2X/Hkw
+ZRd3Bx9o8f5/HvbswZHdnqp071qtVCWTabWXDYr615nUjdzCPEcvNvRvjPvwldFB
+1EwBCQIQSfmzboxjbTsnad7sNoBKx3BVTTLYuj3QSuActFJ34Y6Ry2kTN6Pq33Aq
+y593mscEWTkzgBlAVT/ybOK624PyJmYBXQOxtsoQ
+=iQZf
+-----END PGP MESSAGE-----
+
+#+END_gpg
+#+END_gpg
+" 15 334 (help-echo "Encrypted — C-c d decrypt, C-c v view ciphertext" keymap (keymap (3 keymap (118 . inline-crypt-toggle-armor-visibility) (100 . inline-crypt-decrypt-at-point))) read-only t inline-crypt-hidden t inline-crypt-collapsed t face inline-crypt-encrypted-face))
+org-crypt ERROR="Text is read-only"

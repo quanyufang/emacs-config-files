@@ -81,9 +81,9 @@
     "crypt" 'file)))
 (add-hook 'org-mode-hook #'org-crypt--hide-all-encrypted-entries)
 
-;; Protect encrypted PGP blocks from accidental editing
+;; Protect org-level encrypted entries (not inline-crypt blocks inside decrypted entries)
 (defun org-crypt--protect-encrypted-blocks ()
-  "Mark PGP blocks in the buffer as read-only."
+  "Mark org-crypt PGP blocks read-only.  Skip inline-crypt blocks."
   (interactive)
   (save-excursion
     (goto-char (point-min))
@@ -91,12 +91,24 @@
       (let ((beg (match-beginning 0)))
         (when (re-search-forward "-----END PGP MESSAGE-----" nil t)
           (let ((end (match-end 0)))
-            (with-silent-modifications
-              (add-text-properties beg end
-                                   '(read-only t
-                                     help-echo "Encrypted — use C-c n c to decrypt")))))))))
+            (when (save-excursion
+                    (goto-char beg)
+                    (org-at-encrypted-entry-p))
+              (with-silent-modifications
+                (add-text-properties beg end
+                                     '(read-only t
+                                       help-echo "Encrypted — use C-c n c to decrypt"))))))))))
 (add-hook 'org-mode-hook #'org-crypt--protect-encrypted-blocks)
 (add-hook 'after-save-hook #'org-crypt--protect-encrypted-blocks)
+
+(defun org-crypt--unprotect-current-entry ()
+  "Remove read-only from the org-crypt region so decryption can proceed."
+  (when-let ((enc (org-at-encrypted-entry-p)))
+    (with-silent-modifications
+      (remove-text-properties (car enc) (cdr enc)
+                              '(read-only nil help-echo nil)))))
+
+(advice-add 'org-decrypt-entry :before #'org-crypt--unprotect-current-entry)
 
 ;; After manual decryption (C-c n c), the entry expands for editing.
 ;; After save, org-encrypt-entries re-encrypts and folds it back.
@@ -185,7 +197,7 @@
                               'org-crypt
                               (format "Encryption failed: %s" (error-message-string err))
                               :error)))))
-                      nil t)))
+                      100 t)))
 
 ;; C-c n c: decrypt entry to view/edit (save re-encrypts automatically)
 (global-set-key (kbd "C-c n c") 'org-decrypt-entry)
