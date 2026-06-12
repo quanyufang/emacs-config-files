@@ -133,7 +133,9 @@ gpg --list-keys             # 确认密钥存在
 |------|------|------|
 | `C-c n c` | org-crypt：解密条目查看 | 编辑后保存自动加密 |
 | `C-c e` | inline-crypt：加密选区 | 选中文本 → 替换为 GPG 加密块 |
+| `C-c v` | inline-crypt：查看密文 | 🔐 ↔ 显示 PGP 密文（不解密） |
 | `C-c d` | inline-crypt：解密当前块 | 光标在加密块上 → 就地解密编辑 |
+| `C-c r` | inline-crypt：重新加锁 | 未改动的解密块 → 恢复 🔐，不保存 |
 | — | 保存时自动重加密 | 被 `C-c d` 解开的块，保存时自动恢复加密 |
 
 > **区别**：`org-crypt` 处理整条 org heading，`inline-crypt` 处理段落内的任意文本片段。两者可同时使用。
