@@ -110,24 +110,26 @@ Looks like a compact tag/label in the text."
 
 (defun inline-crypt--opening-delimiter-at-point ()
   "Return buffer position of mode-specific opening delimiter near point, or nil.
-Checks the current line and the line immediately above."
+Checks the current line and the line immediately above (delimiter may be mid-line)."
   (save-excursion
-    (goto-char (line-beginning-position))
-    (let ((check
+    (let ((check-line
            (lambda ()
-             (cond
-              ((and (derived-mode-p 'org-mode)
-                    (looking-at-p (regexp-quote inline-crypt-org-delimiter-begin)))
-               (point))
-              ((and (derived-mode-p 'markdown-mode)
-                    (looking-at-p (regexp-quote inline-crypt-md-delimiter-begin)))
-               (point))
-              (t nil)))))
-      (or (funcall check)
+             (goto-char (line-beginning-position))
+             (let ((line-end (line-end-position)))
+               (cond
+                ((and (derived-mode-p 'org-mode)
+                      (re-search-forward (regexp-quote inline-crypt-org-delimiter-begin)
+                                         line-end t))
+                 (match-beginning 0))
+                ((and (derived-mode-p 'markdown-mode)
+                      (re-search-forward (regexp-quote inline-crypt-md-delimiter-begin)
+                                         line-end t))
+                 (match-beginning 0))
+                (t nil)))))
+      (or (funcall check-line)
           (when (> (line-number-at-pos) 1)
             (forward-line -1)
-            (goto-char (line-beginning-position))
-            (funcall check))))))
+            (funcall check-line)))))))
 
 (defun inline-crypt--extend-end-for-closing-delimiter (end)
   "If a mode-specific closing delimiter follows END, return position after it."
@@ -169,6 +171,35 @@ Checks the current line and the line immediately above."
       (when (string-match (regexp-quote inline-crypt--pgp-end) text start)
         (substring text start (match-end 0))))))
 
+(defun inline-crypt--inner-ciphertext (text)
+  "Return ciphertext payload inside delimiter-wrapped TEXT."
+  (let* ((delims (inline-crypt--delimiters))
+         (open (car delims))
+         (close (cdr delims)))
+    (when (string-match (regexp-quote open) text)
+      (setq text (substring text (match-end 0))))
+    (when (string-match (regexp-quote close) text)
+      (setq text (substring text 0 (match-beginning 0))))
+    (string-trim text)))
+
+(defun inline-crypt--block-ciphertext (beg end)
+  "Return the ciphertext string inside block BEG..END (armored or raw binary)."
+  (let ((text (buffer-substring-no-properties beg end)))
+    (or (inline-crypt--extract-pgp-armor text)
+        (let ((inner (inline-crypt--inner-ciphertext text)))
+          (and (not (string-empty-p inner)) inner)))))
+
+(defun inline-crypt--decrypt-ciphertext (context ciphertext)
+  "Decrypt CIPHERTEXT with CONTEXT; handle armored and binary OpenPGP."
+  (condition-case err
+      (epg-decrypt-string context ciphertext)
+    (error
+     (unless (string-match-p (regexp-quote inline-crypt--pgp-begin) ciphertext)
+       (condition-case err2
+           (epg-decrypt-string context (encode-coding-string ciphertext 'binary))
+         (error (signal (car err) (cdr err)))))
+     (signal (car err) (cdr err)))))
+
 (defun inline-crypt--mode-requires-delimiter-p ()
   "Non-nil when inline blocks must use mode-specific delimiters."
   (or (derived-mode-p 'org-mode) (derived-mode-p 'markdown-mode)))
@@ -182,38 +213,19 @@ Checks the current line and the line immediately above."
       (point-max))))
 
 (defun inline-crypt--prepare-buffer-for-org-crypt-save ()
-  "Expand collapsed inline blocks and clear read-only so org-crypt can run."
+  "Remove read-only from inline encrypted blocks so org-crypt can run on save."
   (unless inline-crypt--preparing-p
     (let ((inline-crypt--preparing-p t)
-          (iterations 0)
           (before-save-hook nil)
           (after-save-hook nil))
       ;; #region agent log
       (inline-crypt--debug-log "prepare-for-org-crypt" "entry" "F"
                                (list (cons :buffer (buffer-name))))
       ;; #endregion
-      (save-excursion
-        (goto-char (point-min))
-        (while (re-search-forward (regexp-quote inline-crypt--pgp-begin) nil t)
-          (setq iterations (1+ iterations))
-          (let* ((hit (match-beginning 0))
-                 (block (progn (goto-char hit) (inline-crypt--find-block-bounds))))
-            (if block
-                (let ((bbeg (car block))
-                      (bend (cdr block)))
-                  (when (inline-crypt--block-already-collapsed-p bbeg)
-                    (inline-crypt--expand-block bbeg bend))
-                  (inline-crypt--clear-protect-overlays bbeg bend)
-                  (with-silent-modifications
-                    (remove-text-properties bbeg bend
-                                            '(read-only nil inline-crypt-collapsed nil
-                                              inline-crypt-hidden nil keymap nil)))
-                  (goto-char (max bend (1+ hit))))
-              (goto-char (max (inline-crypt--skip-non-inline-pgp-armor hit) (1+ hit)))))))
+      (inline-crypt--unprotect-all-inline-blocks-for-save)
       ;; #region agent log
       (inline-crypt--debug-log "prepare-for-org-crypt" "done" "F"
-                               (list (cons :iterations iterations)
-                                     (cons :buffer (buffer-name))))
+                               (list (cons :buffer (buffer-name))))
       ;; #endregion
       nil)))
 
@@ -223,7 +235,45 @@ Checks the current line and the line immediately above."
   (with-silent-modifications
     (remove-text-properties beg end
                             '(read-only nil help-echo nil front-sticky nil
-                              rear-nonsticky nil keymap nil))))
+                              rear-nonsticky nil front-nonsticky nil
+                              cursor-intangible nil keymap nil))))
+
+(defun inline-crypt--unprotect-all-inline-blocks-for-save ()
+  "Clear read-only on every inline encrypted block so save hooks can modify the buffer.
+Does not expand collapsed 🔐 indicators — only removes edit protection."
+  (save-excursion
+    (let ((delims (inline-crypt--delimiters))
+          (open (car delims))
+          (close (cdr delims)))
+      (when (and (inline-crypt--mode-requires-delimiter-p)
+                 (not (string-empty-p open))
+                 (not (string-empty-p close)))
+        (goto-char (point-min))
+        (while (re-search-forward (regexp-quote open) nil t)
+          (let ((beg (match-beginning 0)))
+            (when (re-search-forward (regexp-quote close) nil t)
+              (inline-crypt--unprotect-region
+               beg (inline-crypt--extend-end-for-closing-delimiter (match-end 0))))))))
+    (goto-char (point-min))
+    (let ((pos (point-min)))
+      (while (and (< pos (point-max))
+                  (setq pos (next-single-property-change
+                             pos 'inline-crypt-collapsed nil (point-max))))
+        (when (get-text-property pos 'inline-crypt-collapsed)
+          (let ((end (or (next-single-property-change
+                          pos 'inline-crypt-collapsed nil (point-max))
+                         (point-max))))
+            (inline-crypt--unprotect-region pos end)))))
+    (goto-char (point-min))
+    (let ((pos (point-min)))
+      (while (and (< pos (point-max))
+                  (setq pos (next-single-property-change
+                             pos 'inline-crypt-hidden nil (point-max))))
+        (when (get-text-property pos 'inline-crypt-hidden)
+          (let ((end (or (next-single-property-change
+                          pos 'inline-crypt-hidden nil (point-max))
+                         (point-max))))
+            (inline-crypt--unprotect-region pos end)))))))
 
 (defun inline-crypt--make-collapsed-keymap ()
   "Keymap for collapsed encrypted blocks."
@@ -252,9 +302,18 @@ Checks the current line and the line immediately above."
 (defconst inline-crypt--pgp-end "-----END PGP MESSAGE-----"
   "Literal end marker for inline PGP armor blocks.")
 
-(defun inline-crypt--deny-insert (_ov _before-p)
+(defun inline-crypt--deny-insert (ov before-p)
   "Hook that prevents inserting into a protected ciphertext region."
-  (user-error "Cannot modify encrypted ciphertext"))
+  (when (and ov (overlay-buffer ov))
+    (let ((start (overlay-start ov))
+          (end (overlay-end ov)))
+      (when (and (>= (point) start) (<= (point) end))
+        (user-error "Cannot modify encrypted ciphertext")))))
+
+(defun inline-crypt--exit-collapsed-at-point ()
+  "If point is inside a collapsed encrypted block, move to its end."
+  (when-let ((collapsed (inline-crypt--collapsed-at-point)))
+    (goto-char (cdr collapsed))))
 
 (defun inline-crypt--clear-protect-overlays (&optional beg end)
   "Remove ciphertext protection overlays, optionally limited to BEG..END."
@@ -289,6 +348,7 @@ Checks the current line and the line immediately above."
       (with-silent-modifications
         (add-text-properties beg end
                              `(read-only t
+                               cursor-intangible t
                                front-sticky t
                                rear-nonsticky t
                                face inline-crypt-encrypted-face
@@ -298,7 +358,6 @@ Checks the current line and the line immediately above."
         (overlay-put ov 'inline-crypt-protect t)
         (overlay-put ov 'evaporate t)
         (overlay-put ov 'insert-in-front-hooks (list #'inline-crypt--deny-insert))
-        (overlay-put ov 'insert-behind-hooks (list #'inline-crypt--deny-insert))
         (overlay-put ov 'keymap keymap)
         (push ov inline-crypt--protect-overlays)))))
 
@@ -343,6 +402,7 @@ The revealed ciphertext is read-only.  Returns (new-beg . new-end), or nil on fa
       (remove-text-properties beg end
                               '(inline-crypt-collapsed nil read-only nil
                                 front-sticky nil rear-nonsticky nil
+                                front-nonsticky nil cursor-intangible nil
                                 keymap nil help-echo nil))
       (add-text-properties beg end '(inline-crypt-hidden t)))
     (inline-crypt--protect-armor-region beg end)
@@ -372,6 +432,9 @@ The overlay approach avoids conflicts with font-lock."
          `(inline-crypt-collapsed t
            inline-crypt-hidden t
            read-only t
+           cursor-intangible t
+           rear-nonsticky t
+           front-nonsticky t
            keymap ,keymap
            help-echo "Encrypted — C-c d decrypt, C-c v view ciphertext"))))))
 
@@ -427,10 +490,11 @@ The overlay approach avoids conflicts with font-lock."
                        (t
                         (inline-crypt--collapse-block bbeg bend)
                         (setq count (1+ count))))
-                      (goto-char bend))
-              (goto-char (inline-crypt--skip-non-inline-pgp-armor hit))))))))
+                      (goto-char (max bend (1+ hit))))
+                  (goto-char (max (inline-crypt--skip-non-inline-pgp-armor hit) (1+ hit))))))))
       (when (> count 0)
-        (message "Collapsed %d encrypted block(s)." count)))))
+        (message "Collapsed %d encrypted block(s)." count))
+      (inline-crypt--exit-collapsed-at-point)))))
 
 (defun inline-crypt--schedule-collapse (&optional delay)
   "Debounced wrapper around `inline-crypt--collapse-all-in-buffer'."
@@ -448,9 +512,26 @@ The overlay approach avoids conflicts with font-lock."
 
 ;;; ── Find encrypted block at point ──────────────────────────
 
-(defun inline-crypt--find-block-bounds ()
-  "Return (beg . end) of the inline encrypted block at point, or nil.
-In org/markdown mode, only delimiter-wrapped blocks qualify (not org-crypt)."
+(defun inline-crypt--find-delimiter-block-bounds ()
+  "Return (beg . end) of the delimiter-wrapped block containing point, or nil."
+  (when (inline-crypt--mode-requires-delimiter-p)
+    (save-excursion
+      (let* ((orig (point))
+             (delims (inline-crypt--delimiters))
+             (open (car delims))
+             (close (cdr delims)))
+        (when (and (not (string-empty-p open)) (not (string-empty-p close)))
+          (when (re-search-backward (regexp-quote open) nil t)
+            (let ((beg (match-beginning 0)))
+              (goto-char beg)
+              (when (re-search-forward (regexp-quote close) nil t)
+                (let ((end (inline-crypt--extend-end-for-closing-delimiter
+                            (match-end 0))))
+                  (when (and (<= beg orig) (<= orig end))
+                    (cons beg end)))))))))))
+
+(defun inline-crypt--find-pgp-armor-block-bounds ()
+  "Return (beg . end) of a PGP armor block at point, with delimiter when required."
   (save-excursion
     (let ((orig (point))
           beg end)
@@ -470,7 +551,13 @@ In org/markdown mode, only delimiter-wrapped blocks qualify (not org-crypt)."
             (when (re-search-forward (regexp-quote inline-crypt--pgp-end) nil t)
               (setq end (inline-crypt--extend-end-for-closing-delimiter (match-end 0)))
               (when (and (<= beg orig) (<= orig end))
-                (cons beg end))))))))))
+                (cons beg end)))))))))
+
+(defun inline-crypt--find-block-bounds ()
+  "Return (beg . end) of the inline encrypted block at point, or nil.
+In org/markdown mode, only delimiter-wrapped blocks qualify (not org-crypt)."
+  (or (inline-crypt--find-delimiter-block-bounds)
+      (inline-crypt--find-pgp-armor-block-bounds))))
 
 ;;; ── Track decrypted blocks for re-encryption on save ───────
 
@@ -546,21 +633,24 @@ this exact armor is restored instead of re-encrypting."
           (> (car (car a)) (car (car b))))))
 
 (defun inline-crypt--encrypt-plaintext (plaintext)
-  "Encrypt PLAINTEXT; return ASCII-armored OpenPGP ciphertext."
+  "Encrypt PLAINTEXT; return ASCII-armored OpenPGP ciphertext (UTF-8 safe)."
   (let* ((context (epg-make-context 'OpenPGP))
          (keys (ignore-errors (epg-list-keys context inline-crypt-gpg-key)))
          (recipients (or keys (epg-list-keys context)))
          (plaintext-bytes (encode-coding-string plaintext 'utf-8))
-         encrypted)
+         encrypted text)
     (unless recipients
       (user-error "No GPG keys available for encryption"))
     (epg-context-set-armor context t)
     (setq encrypted (epg-encrypt-string context plaintext-bytes recipients))
     (unless encrypted
       (user-error "Encryption failed. Check GPG key availability"))
-    (if (multibyte-string-p encrypted)
-        encrypted
-      (decode-coding-string encrypted 'utf-8))))
+    (setq text (if (multibyte-string-p encrypted)
+                   encrypted
+                 (decode-coding-string encrypted 'utf-8)))
+    (unless (string-match-p (regexp-quote inline-crypt--pgp-begin) text)
+      (user-error "Encryption did not produce ASCII armor — reload config and retry"))
+    text))
 
 ;;; ── Encrypt region ─────────────────────────────────────────
 
@@ -596,13 +686,7 @@ With no active region, encrypt the org paragraph or current line at point."
   (when (string-empty-p (string-trim (buffer-substring-no-properties beg end)))
     (user-error "Selected text is empty"))
   (let* ((plaintext (buffer-substring-no-properties beg end))
-         (plaintext-bytes (encode-coding-string plaintext 'utf-8))
-         (context (epg-make-context 'OpenPGP))
-         (keys (ignore-errors (epg-list-keys context inline-crypt-gpg-key)))
-         (encrypted (epg-encrypt-string context plaintext-bytes
-                                        (or keys (epg-list-keys context)))))
-    (unless encrypted
-      (user-error "Encryption failed. Check GPG key availability"))
+         (encrypted (inline-crypt--encrypt-plaintext plaintext)))
     (delete-region beg end)
     (let ((delims (inline-crypt--delimiters)))
       (unless (string-empty-p (car delims))
@@ -615,7 +699,8 @@ With no active region, encrypt the org paragraph or current line at point."
         (with-silent-modifications
           (add-text-properties (car block) (cdr block)
                                '(face inline-crypt-encrypted-face)))
-        (inline-crypt--collapse-block (car block) (cdr block))))
+        (inline-crypt--collapse-block (car block) (cdr block))
+        (goto-char (cdr block))))
     ;; #region agent log
     (inline-crypt--debug-log "encrypt-region" "encrypted" "G"
                              (list (cons :beg beg)
@@ -710,11 +795,12 @@ The plaintext is tracked so it can be re-encrypted before saving."
           (user-error "No inline encrypted block at point (org-level encryption uses C-c n c)")
         (user-error "No encrypted block found at point")))
     (let* ((armor (buffer-substring-no-properties beg end))
-           (pgp-armor (or (inline-crypt--extract-pgp-armor armor) armor))
+           (pgp-armor (or (inline-crypt--block-ciphertext beg end)
+                          (user-error "No ciphertext found in inline block")))
            (context (epg-make-context 'OpenPGP))
            (raw-plaintext
             (condition-case err
-                (epg-decrypt-string context pgp-armor)
+                (inline-crypt--decrypt-ciphertext context pgp-armor)
               (error
                (user-error "Decryption failed: %s"
                            (error-message-string err)))))
@@ -813,8 +899,9 @@ Does not write to disk — the buffer stays unmodified."
             (inline-crypt--restore-armor beg end original-armor)
             'restored)
         (let ((encrypted (inline-crypt--encrypt-plaintext current-text)))
-          (delete-region beg end)
-          (inline-crypt--delete-orphan-closing-delimiter-at beg)
+          (let ((inhibit-read-only t))
+            (delete-region beg end)
+            (inline-crypt--delete-orphan-closing-delimiter-at beg))
           (let ((delims (inline-crypt--delimiters))
                 (ins-pos (point)))
             (unless (string-empty-p (car delims))
@@ -859,8 +946,10 @@ Does not write to disk — the buffer stays unmodified."
 If a block's plaintext was not modified, restore the original armor
 instead of re-encrypting to avoid unnecessary file changes."
   (unless inline-crypt--preparing-p
-    (inline-crypt--prune-decrypted-registry)
-    (let ((regions (inline-crypt--all-decrypted-regions)))
+    (let ((inhibit-read-only t))
+      (inline-crypt--prepare-buffer-for-org-crypt-save)
+      (inline-crypt--prune-decrypted-registry)
+      (let ((regions (inline-crypt--all-decrypted-regions)))
       ;; #region agent log
       (inline-crypt--debug-log "reencrypt-before-save" "hook entry" "E"
                                (list (cons :num-regions (length regions))
@@ -887,8 +976,17 @@ instead of re-encrypting to avoid unnecessary file changes."
             (message "Restored %d unchanged block(s) (no re-encryption needed)."
                      restored))
            ((> re-encrypted 0)
-            (message "Re-encrypted %d modified block(s) before save." re-encrypted)))))
-      (inline-crypt--prepare-buffer-for-org-crypt-save))))
+            (message "Re-encrypted %d modified block(s) before save." re-encrypted)))))))))
+
+(defun inline-crypt--pre-command-exit-collapsed ()
+  "Before inserting text, jump out of protected ciphertext if point is inside it."
+  (when (memq this-command
+              '(self-insert-command newline-and-indent org-return org-open-line))
+    (cond
+     ((inline-crypt--collapsed-at-point)
+      (inline-crypt--exit-collapsed-at-point))
+     ((inline-crypt--armor-visible-at-point)
+      (goto-char (cdr (inline-crypt--armor-visible-at-point)))))))
 
 ;;; ── Minor mode ─────────────────────────────────────────────
 
@@ -912,8 +1010,10 @@ Encrypted blocks are re-encrypted automatically when saving the buffer."
   (if inline-crypt-mode
       (progn
         (add-hook 'before-save-hook #'inline-crypt--reencrypt-before-save -100 t)
+        (add-hook 'pre-command-hook #'inline-crypt--pre-command-exit-collapsed nil t)
         (inline-crypt--schedule-collapse 0.1))
     (progn
+      (remove-hook 'pre-command-hook #'inline-crypt--pre-command-exit-collapsed t)
       (when inline-crypt--collapse-timer
         (cancel-timer inline-crypt--collapse-timer)
         (setq inline-crypt--collapse-timer nil))
