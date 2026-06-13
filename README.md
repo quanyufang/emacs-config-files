@@ -55,6 +55,8 @@
 | 快速捕获 | Org-capture | 快速记录想法和待办事项 |
 | Markdown 编辑 | markdown-mode | 完整的 Markdown 编辑支持 |
 
+> 笔记方案设计、Denote / Org-roam 功能说明与加密开发笔记见 [DevNotes-inline-crypt.md](DevNotes-inline-crypt.md)。
+
 ### 现代补全（替代 Helm）
 
 | 包 | 用途 |
@@ -220,6 +222,7 @@ gpg --list-keys             # 确认密钥存在
 │   ├── setup-text.el                 # 文本模式
 │   └── setup-local.el                # 本地配置（不提交）
 ├── EmacsCommand.md                   # 详细命令文档
+├── DevNotes-inline-crypt.md            # 笔记方案、Denote/Org-roam、加密开发笔记
 └── EmacsEssential.md                 # Emacs 基础知识
 ```
 
