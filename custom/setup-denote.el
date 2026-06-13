@@ -81,9 +81,9 @@
     "crypt" 'file)))
 (add-hook 'org-mode-hook #'org-crypt--hide-all-encrypted-entries)
 
-;; Protect org-level encrypted entries (not inline-crypt blocks inside decrypted entries)
+;; Protect encrypted entry bodies from accidental edits.
 (defun org-crypt--protect-encrypted-blocks ()
-  "Mark org-crypt PGP blocks read-only.  Skip inline-crypt blocks."
+  "Mark org-crypt PGP blocks read-only."
   (interactive)
   (save-excursion
     (goto-char (point-min))
@@ -127,6 +127,7 @@
                         '("PLACEHOLDER-RUN-M-x-emacs-setup-gpg")))
 (setq org-crypt-disable-auto-save t)
 (setq org-crypt-tag-matcher "crypt")
+(setq org-tags-exclude-from-inheritance '("crypt"))
 
 ;; Auto-encrypt :crypt: entries before every save, with detailed error reporting
 (defun org-crypt--validate-key ()

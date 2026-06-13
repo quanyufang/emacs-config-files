@@ -342,7 +342,6 @@ ships an older built-in transient."
 (safe-require 'setup-help "Help system")
 (safe-require 'setup-vertico "Vertico completion framework")
 (safe-require 'setup-denote "Note management system")
-(safe-require 'setup-inline-crypt "Inline text encryption")
 (safe-require 'setup-editing "Text editing enhancements")
 
 ;;; General settings

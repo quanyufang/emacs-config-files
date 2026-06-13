@@ -1,4 +1,7 @@
-;;; setup-inline-crypt.el --- Inline text encryption with GPG for any buffer
+;;; setup-inline-crypt.el --- Inline text encryption (NOT LOADED)
+;;
+;; DEPRECATED: 不再从 init.el 加载。笔记加密请仅用 org-crypt（:crypt: 标签）。
+;; 本文件保留作参考，重启 Emacs 后 C-c e 等快捷键不会生效。
 ;;
 ;; Usage:
 ;;   C-c e   - encrypt selected region (→ 🔐 collapsed indicator)

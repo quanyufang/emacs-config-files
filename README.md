@@ -14,7 +14,6 @@
 - **移除**：GNU GLOBAL（GTAGS）、CEDET、ECB、Eclim、Flycheck、Company 等开发工具
 - **新增**：Vertico + Consult + Marginalia + Orderless + Embark 现代补全方案（替代 Helm）
 - **新增**：Denote + Org-roam + Org-crypt 笔记管理系统
-- **新增**：inline-crypt 内联文本加密（段落内部分文本加密）
 - **迁移**：全部 `defadvice` 替换为 `advice-add`
 - **精简**：配置文件从 ~2000 行缩减为 ~1200 行
 
@@ -49,13 +48,12 @@
 |------|----|------|
 | 笔记管理 | Denote | 基于文件命名规范的笔记系统 |
 | 双向链接 | Org-roam | 类 Roam Research 的知识图谱 |
-| 条目加密 | Org-crypt | GPG 加密整条 org heading |
-| 内联加密 | inline-crypt | GPG 加密段落内任意文本片段 |
+| 条目加密 | Org-crypt | GPG 加密整条 org heading（Emacs 内置） |
 | 现代化显示 | Org-modern | 美化 org-mode 的视觉呈现 |
 | 快速捕获 | Org-capture | 快速记录想法和待办事项 |
 | Markdown 编辑 | markdown-mode | 完整的 Markdown 编辑支持 |
 
-> 笔记方案设计、Denote / Org-roam 功能说明与加密开发笔记见 [DevNotes-inline-crypt.md](DevNotes-inline-crypt.md)。
+> 笔记方案与 Denote / Org-roam / org-crypt 说明见 [DevNotes-notes.md](DevNotes-notes.md)。
 
 ### 现代补全（替代 Helm）
 
@@ -103,7 +101,7 @@ git checkout emacs30-upgrade
 
 ```bash
 # macOS（推荐）
-brew install gnupg          # 内联加密 + org 笔记加密
+brew install gnupg          # org 笔记加密（org-crypt）
 brew install ripgrep        # consult-ripgrep 全文搜索
 
 # 创建笔记目录
@@ -117,9 +115,8 @@ gpg --full-generate-key     # 按提示操作
 gpg --list-keys             # 确认密钥存在
 ```
 
-> 配置完成后，选中敏感文本按 `C-c e` 即可加密，按 `C-c d` 解密查看。
-> 详见 [GPG-Guide.md](GPG-Guide.md) 了解 GPG 密钥备份、恢复和日常使用。
-> 新手请先看 [GPG-Tutorial.md](GPG-Tutorial.md) 逐步操作。
+> 在 org heading 末尾加 ``:crypt:`` 标签，保存即自动加密；``C-c n c`` 解密编辑。  
+> 详见 [GPG-Guide.md](GPG-Guide.md)、[GPG-Tutorial.md](GPG-Tutorial.md)。
 
 ### 首次启动
 
@@ -129,18 +126,14 @@ gpg --list-keys             # 确认密钥存在
 
 ## 常用快捷键
 
-### 加密
+### 加密（org-crypt）
 
 | 按键 | 功能 | 说明 |
 |------|------|------|
-| `C-c n c` | org-crypt：解密条目查看 | 编辑后保存自动加密 |
-| `C-c e` | inline-crypt：加密选区 | 选中文本 → 替换为 GPG 加密块 |
-| `C-c v` | inline-crypt：查看密文 | 🔐 ↔ 显示 PGP 密文（不解密） |
-| `C-c d` | inline-crypt：解密当前块 | 光标在加密块上 → 就地解密编辑 |
-| `C-c r` | inline-crypt：重新加锁 | 未改动的解密块 → 恢复 🔐，不保存 |
-| — | 保存时自动重加密 | 被 `C-c d` 解开的块，保存时自动恢复加密 |
+| `C-c n c` | 解密当前条目 | 编辑后 `C-x C-s` 保存自动重加密 |
+| — | 保存时自动加密 | heading 带 `:crypt:` 标签的条目 |
 
-> **区别**：`org-crypt` 处理整条 org heading，`inline-crypt` 处理段落内的任意文本片段。两者可同时使用。
+在标题行末尾加 `:crypt:`，例如 ``* 我的秘密 :crypt:``。加密的是**标题下方正文**，标题本身保持可见。
 
 ### 核心操作
 
@@ -208,8 +201,8 @@ gpg --list-keys             # 确认密钥存在
 │   ├── mylib.el                      # 工具函数
 │   ├── setup-editing.el              # 编辑核心配置
 │   ├── setup-vertico.el              # Vertico+Consult 补全
-│   ├── setup-denote.el               # 笔记系统
-│   ├── setup-inline-crypt.el          # 内联文本加密
+│   ├── setup-denote.el               # 笔记系统 + org-crypt
+│   ├── setup-inline-crypt.el         # （已停用，不再加载）
 │   ├── setup-files.el                # 文件管理
 │   ├── setup-faces-and-ui.el         # 主题/UI
 │   ├── setup-convenience.el          # 便捷功能
@@ -222,7 +215,7 @@ gpg --list-keys             # 确认密钥存在
 │   ├── setup-text.el                 # 文本模式
 │   └── setup-local.el                # 本地配置（不提交）
 ├── EmacsCommand.md                   # 详细命令文档
-├── DevNotes-inline-crypt.md            # 笔记方案、Denote/Org-roam、加密开发笔记
+├── DevNotes-notes.md                 # 笔记方案说明
 └── EmacsEssential.md                 # Emacs 基础知识
 ```
 

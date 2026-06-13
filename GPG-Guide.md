@@ -220,14 +220,11 @@ gpg --edit-key XXXX1234ABCD5678           # 交互式管理（设过期时间、
 ### 6.1 你的配置已就绪
 
 ```elisp
-;; setup-denote.el — org-crypt 条目加密
-(setq org-crypt-key nil)   ; nil = 使用 GPG 默认密钥
-
-;; setup-inline-crypt.el — 内联文本片段加密
-;; 同样使用默认密钥
+;; setup-denote.el — org-crypt 条目加密（Emacs 内置）
+;; org-crypt-key 由 setup-local.el 或 M-x emacs-setup-gpg 配置
 ```
 
-因为 `org-crypt-key` 和 `inline-crypt-gpg-key` 都设为 `nil`，Emacs 会自动使用你的默认密钥（就是你生成的那个）。
+`org-crypt-key` 设为有效指纹后，保存时自动加密带 `:crypt:` 的 heading 正文。
 
 ### 6.2 如果需要指定密钥
 
@@ -242,15 +239,8 @@ gpg --edit-key XXXX1234ABCD5678           # 交互式管理（设过期时间、
 
 | 场景 | 操作 |
 |------|------|
-| 加密整条笔记 | org heading 加 `:crypt:` 标签，Ctrl-S 保存即自动加密 |
-| 解密整条笔记 | `C-c n c`，再次运行恢复加密 |
-| 加密笔记内片段 | 选中文本 → `C-c e` → 密文自动折叠为 🔐 指示器 |
-| 查看密文（不解密） | 光标在 🔐 上 → `C-c v` 展开/收起 PGP 密文 |
-| 解密查看片段 | 光标在 🔐 上 → `C-c d`（解密后绿色背景显示原文） |
-| 未改内容重新加锁 | 解密后未编辑 → `C-c r` 恢复 🔐，不产生文件修改 |
-| 编辑后自动加密 | Ctrl-S 保存，修改过的片段重新加密；未改动的还原原密文 |
-
-> **显示**：加密后默认折叠为 🔐。`C-c v` 可临时查看完整密文（不解密）；`C-c d` 解密为明文；未改动的明文用 `C-c r` 重新加锁，无需保存。全局关闭折叠可在 `setup-inline-crypt.el` 中将 `inline-crypt-collapse-encrypted` 设为 `nil`。
+| 加密整条 entry | heading 加 `:crypt:`，保存（`C-x C-s`） |
+| 解密编辑 | `C-c n c`，改完后保存自动重加密 |
 
 ---
 
