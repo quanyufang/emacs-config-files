@@ -15,6 +15,24 @@
 (setq package-install-upgrade-built-in t)  ; allow upgrading built-in deps like transient
 (package-initialize)
 
+;;; ── Ensure ELPA org is loaded early to avoid version mismatch ──
+(let* ((org-pkg (cadr (assq 'org package-alist)))
+       (org-dir (and org-pkg (package-desc-dir org-pkg)))
+       (org-elpa-p (and org-dir (file-directory-p org-dir) (string-match-p "elpa" org-dir))))
+  (when org-elpa-p
+    ;; Push to front of load-path to override built-in
+    (setq load-path (cons org-dir (remove org-dir load-path)))
+    (message "Prioritizing ELPA org from %s" org-dir)))
+
+;;; ── Ensure ELPA transient is loaded early ────────────────────
+(let* ((transient-pkg (cadr (assq 'transient package-alist)))
+       (transient-dir (and transient-pkg (package-desc-dir transient-pkg)))
+       (transient-elpa-p (and transient-dir (file-directory-p transient-dir) (string-match-p "elpa" transient-dir))))
+  (when transient-elpa-p
+    ;; Push to front of load-path to override built-in
+    (setq load-path (cons transient-dir (remove transient-dir load-path)))
+    (message "Prioritizing ELPA transient from %s" transient-dir)))
+
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -23,41 +41,42 @@
  '(ansi-color-faces-vector
    [default bold shadow italic underline bold bold-italic bold])
  '(ansi-color-names-vector
-   (vector "#4d4d4c" "#c82829" "#718c00" "#eab700" "#4271ae" "#8959a8" "#3e999f" "#ffffff"))
+   (vector "#4d4d4c" "#c82829" "#718c00" "#eab700" "#4271ae" "#8959a8"
+           "#3e999f" "#ffffff"))
  '(beacon-color "#f2777a")
  '(custom-enabled-themes '(grandshell))
  '(custom-safe-themes
-   '("3860a842e0bf585df9e5785e06d600a86e8b605e5cc0b74320dfe667bcbe816c" "f9574c9ede3f64d57b3aa9b9cef621d54e2e503f4d75d8613cbcc4ca1c962c21" "b9293d120377ede424a1af1e564ba69aafa85e0e9fd19cf89b4e15f8ee42a8bb" "8d1e447fea4fc82aac533ca87be3f120daffc2905229c01f07ba18ad1edcc376" "82d2cac368ccdec2fcc7573f24c3f79654b78bf133096f9b40c20d97ec1d8016" "1b8d67b43ff1723960eb5e0cba512a2c7a2ad544ddb2533a90101fd1852b426e" "628278136f88aa1a151bb2d6c8a86bf2b7631fbea5f0f76cba2a0079cd910f7d" "f0d8af755039aa25cd0792ace9002ba885fd14ac8e8807388ab00ec84c9497d7" "06f0b439b62164c6f8f84fdda32b62fb50b6d00e8b01c2208e55543a6337433a" "bb08c73af94ee74453c90422485b29e5643b73b05e8de029a6909af6a3fb3f58" default))
+   '("3860a842e0bf585df9e5785e06d600a86e8b605e5cc0b74320dfe667bcbe816c"
+     "f9574c9ede3f64d57b3aa9b9cef621d54e2e503f4d75d8613cbcc4ca1c962c21"
+     "b9293d120377ede424a1af1e564ba69aafa85e0e9fd19cf89b4e15f8ee42a8bb"
+     "8d1e447fea4fc82aac533ca87be3f120daffc2905229c01f07ba18ad1edcc376"
+     "82d2cac368ccdec2fcc7573f24c3f79654b78bf133096f9b40c20d97ec1d8016"
+     "1b8d67b43ff1723960eb5e0cba512a2c7a2ad544ddb2533a90101fd1852b426e"
+     "628278136f88aa1a151bb2d6c8a86bf2b7631fbea5f0f76cba2a0079cd910f7d"
+     "f0d8af755039aa25cd0792ace9002ba885fd14ac8e8807388ab00ec84c9497d7"
+     "06f0b439b62164c6f8f84fdda32b62fb50b6d00e8b01c2208e55543a6337433a"
+     "bb08c73af94ee74453c90422485b29e5643b73b05e8de029a6909af6a3fb3f58"
+     default))
  '(exec-path
-   '("/usr/bin" "/bin" "/usr/sbin" "/sbin" "/usr/local/bin" "~/bin/global/bin" "~/.emacs.d/manual-install/mew-6.7/bin" "/Library/TeX/Distributions/Programs/texbin" "/Library/TeX/texbin/xelatex"))
+   '("/usr/bin" "/bin" "/usr/sbin" "/sbin" "/usr/local/bin"
+     "~/bin/global/bin" "~/.emacs.d/manual-install/mew-6.7/bin"
+     "/Library/TeX/Distributions/Programs/texbin"
+     "/Library/TeX/texbin/xelatex"))
  '(fci-rule-color "#d6d6d6")
  '(frame-background-mode 'dark)
  '(line-number-mode t)
- '(package-selected-packages
-   '(zygospore w3m volatile-highlights vlf smartparens shell-pop recentf-ext rainbow-mode markdown-mode iedit ibuffer-vc highlight-symbol grandshell-theme golden-ratio expand-region duplicate-thing dtrt-indent discover-my-major diff-hl comment-dwim-2 clean-aindent-mode anzu ws-butler yasnippet unicad ztree denote org-roam org-modern vertico consult marginalia orderless embark embark-consult wgrep))
+ '(package-selected-packages nil)
  '(send-mail-function 'smtpmail-send-it)
  '(smtpmail-smtp-server "smtp.gmail.com")
  '(smtpmail-smtp-service 587)
  '(vc-annotate-background nil)
  '(vc-annotate-color-map
-   '((20 . "#c82829")
-     (40 . "#f5871f")
-     (60 . "#eab700")
-     (80 . "#718c00")
-     (100 . "#3e999f")
-     (120 . "#4271ae")
-     (140 . "#8959a8")
-     (160 . "#c82829")
-     (180 . "#f5871f")
-     (200 . "#eab700")
-     (220 . "#718c00")
-     (240 . "#3e999f")
-     (260 . "#4271ae")
-     (280 . "#8959a8")
-     (300 . "#c82829")
-     (320 . "#f5871f")
-     (340 . "#eab700")
-     (360 . "#718c00")))
+   '((20 . "#c82829") (40 . "#f5871f") (60 . "#eab700") (80 . "#718c00")
+     (100 . "#3e999f") (120 . "#4271ae") (140 . "#8959a8")
+     (160 . "#c82829") (180 . "#f5871f") (200 . "#eab700")
+     (220 . "#718c00") (240 . "#3e999f") (260 . "#4271ae")
+     (280 . "#8959a8") (300 . "#c82829") (320 . "#f5871f")
+     (340 . "#eab700") (360 . "#718c00")))
  '(vc-annotate-very-old-color nil)
  '(window-divider-mode nil))
 
@@ -213,10 +232,15 @@ Refreshes archive contents first, then presents a diff-like buffer."
   (let ((upgradable
          (seq-filter
           (lambda (p)
-            (let ((installed (cadr (assq (car p) package-alist))))
-              (and installed
+            (let* ((name (car p))
+                   (archive-descs (cdr p))
+                   (archive-desc (if (arrayp archive-descs)
+                                     (aref archive-descs 0)
+                                   archive-descs))
+                   (installed (cadr (assq name package-alist))))
+              (and installed archive-desc
                    (version-list-< (package-desc-version installed)
-                                   (package-desc-version (cadr p))))))
+                                   (package-desc-version archive-desc)))))
           package-archive-contents)))
     (if (null upgradable)
         (message "All packages are up to date.")
@@ -226,14 +250,30 @@ Refreshes archive contents first, then presents a diff-like buffer."
           (erase-buffer)
           (insert (format "Updates available for %d package(s):\n\n" (length upgradable)))
           (dolist (p upgradable)
-            (let* ((name     (car p))
-                   (archive  (cadr p))
+            (let* ((name      (car p))
+                   (archive-descs (cdr p))
+                   (archive-desc (if (arrayp archive-descs)
+                                     (aref archive-descs 0)
+                                   archive-descs))
                    (installed (cadr (assq name package-alist)))
-                   (old-ver  (package-version-join (package-desc-version installed)))
-                   (new-ver  (package-version-join (package-desc-version archive))))
+                   (old-ver   (package-version-join (package-desc-version installed)))
+                   (new-ver   (package-version-join (package-desc-version archive-desc))))
               (insert (format "  %-30s %s → %s\n" (symbol-name name) old-ver new-ver))))
           (insert "\nPress 'u' to upgrade all, 'q' to quit.\n"))
         (package-menu-mode)
+        ;; Override 'u' to upgrade all packages
+        (let ((map (current-local-map)))
+          (when map
+            (define-key map (kbd "u")
+                        (lambda ()
+                          (interactive)
+                          (message "Upgrading all packages...")
+                          (dolist (p upgradable)
+                            (let ((name (car p)))
+                              (message "Upgrading %s..." (symbol-name name))
+                              (package-install name)))
+                          (message "All packages upgraded. Restart Emacs to load new versions.")
+                          (kill-buffer "*Package Updates*")))))
         (goto-char (point-min))
         (pop-to-buffer (current-buffer))))))
 
@@ -287,29 +327,6 @@ Show the list first and ask for confirmation."
   (message "Recompiling packages (this may take a minute)...")
   (package-recompile-all)
   (message "Package recompilation complete."))
-
-;;; ── Fix transient version for magit-section ────────────────
-;; magit-section (dep of org-roam) requires transient >= 0.13.
-;; Emacs 30 ships an older transient as built-in; we must load the
-;; upgraded ELPA version before any package tries to load magit-section.
-(defun ensure-transient-upgraded ()
-  "Ensure the ELPA version of transient is loaded before magit-section needs it.
-magit-section (dep of org-roam) requires transient >= 0.13, but Emacs 30
-ships an older built-in transient."
-  (when (package-installed-p 'transient)
-    (let ((dir (package-desc-dir (cadr (assq 'transient package-alist)))))
-      (when (and dir (file-directory-p dir) (string-match-p "elpa" dir))
-        ;; Unload the built-in transient if already loaded
-        (when (featurep 'transient)
-          (unload-feature 'transient t))
-        ;; Push ELPA version to front of load-path and load it
-        (add-to-list 'load-path dir)
-        (require 'transient)
-        (message "Loaded transient %s"
-                 (package-version-join
-                  (package-desc-version
-                   (cadr (assq 'transient package-alist)))))))))
-(ensure-transient-upgraded)
 
 ;;; Load custom modules (with graceful degradation)
 (add-to-list 'load-path "~/.emacs.d/custom")
